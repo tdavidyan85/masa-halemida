@@ -53,7 +53,7 @@ footer a{color:var(--muted)}
   <h2>המקצועות</h2>
   <div class="subjects">
     <a class="subj" href="math/" data-say="חשבון, כיתה ה"><div class="ic" style="background:#ffe0c4">×÷</div><span class="nm">חשבון</span><span class="st" id="st-math">כיתה ה׳ · שיעורים, תרגול ו-8 מבחנים</span></a>
-    <div class="subj soon" data-say="אנגלית. בקרוב"><div class="ic" style="background:#cfe3ff">ABC</div><span class="nm">אנגלית</span><span class="st">בקרוב</span></div>
+    <a class="subj" href="english/" data-say="אנגלית. שמות גוף"><div class="ic" style="background:#cfe3ff">ABC</div><span class="nm">אנגלית</span><span class="st">שמות גוף · שיעורים, תרגול ו-6 מבחנים</span></a>
     <div class="subj soon" data-say="הבנת הנקרא. בקרוב"><div class="ic" style="background:#d6f3e4">א״ב</div><span class="nm">הבנת הנקרא</span><span class="st">בקרוב</span></div>
   </div>
   <footer><a href="about.html">להורים ולמורים · פרטיות</a></footer>
@@ -117,6 +117,8 @@ const n=Object.values(ST.genStats||{}).reduce((a,x)=>a+(x.n||0),0);
 if(n)document.getElementById('st-math').textContent=`כיתה ה׳ · כבר ענית על ${n} שאלות`;
 let sess=null;try{sess=JSON.parse(localStorage.getItem('mj-session-math')||localStorage.getItem('mj-session')||'null')}catch(e){}
 if(sess&&sess.idx<sess.items.length)document.querySelector('a[href="math/"]').classList.add('now');
+let sessE=null;try{sessE=JSON.parse(localStorage.getItem('mj-session-english')||'null')}catch(e){}
+if(sessE&&sessE.idx<sessE.items.length)document.querySelector('a[href="english/"]').classList.add('now');
 /* speech: Hebrew voice if the browser has one */
 let voices=[];const lv=()=>{try{voices=speechSynthesis.getVoices().filter(v=>/^(he|iw)/i.test(v.lang))}catch(e){}};lv();try{speechSynthesis.onvoiceschanged=lv}catch(e){}
 function say(t){if(!voices.length)return;try{speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(t);u.lang='he-IL';u.voice=voices.find(v=>/online|natural/i.test(v.name))||voices[0];u.rate=(ST.settings&&ST.settings.rate)||.9;speechSynthesis.speak(u)}catch(e){}}
