@@ -1,0 +1,5 @@
+deploy/
+standalone/
+node_modules/
+studio.html
+*.png
