@@ -1,11 +1,20 @@
-const {chromium}=require('playwright');
-(async()=>{const b=await chromium.launch();const p=await b.newPage({viewport:{width:1000,height:850}});const errs=[];p.on('pageerror',e=>errs.push(e.message));
+const {chromium}=require('playwright');const {check,done,offline}=require('./check');
+(async()=>{const b=await chromium.launch();const p=await b.newPage({viewport:{width:1000,height:850}});await offline(p);const errs=[];p.on('pageerror',e=>errs.push(e.message));
 let sent=null;await p.route('**/rest/v1/feedback',r=>{sent={h:r.request().headers(),body:JSON.parse(r.request().postData())};r.fulfill({status:201,body:''})});
 await p.addInitScript(()=>{localStorage.setItem('mj-state',JSON.stringify({stars:3,streak:0,best:0,stats:{},mistakes:[],days:{},copied:0,settings:{auto:false,rate:0.8,voice:'',sound:false,kidName:'לביא',rate2:1},tour:{home:1,q:1}}))});
 await p.goto('file://'+process.cwd()+'/deploy/english.min.html');await p.waitForTimeout(500);
 await p.evaluate(()=>startSession('gen','pk_sentence'));await p.waitForTimeout(200);
 await p.click('#fbBtn');await p.waitForTimeout(100);await p.screenshot({path:'fb1.png'});
 await p.fill('#fbMsg','התשובה בשאלה הזאת נראית לי לא נכונה');await p.click('.fbwho[data-w="הורה"]');await p.click('#fbSend');await p.waitForTimeout(300);
+if(!check(sent,'the note is sent to the feedback table')){await b.close();return done('tfb')}
 console.log(JSON.stringify(sent.body,null,1).slice(0,700),sent.h.prefer,!!sent.h.apikey);
 console.log('kid name leaked?',JSON.stringify(sent.body).includes('לביא'));
-console.log(errs);await b.close()})();
+const B=sent.body;
+check(!JSON.stringify(sent.body).includes('לביא'),'the kid\'s name is not sent');
+check(B.subject=='english','subject is english');
+check(B.message=='התשובה בשאלה הזאת נראית לי לא נכונה','the message is sent as typed');
+check(/^הורה · /.test(B.kind),'who wrote it (parent) is part of the kind: '+B.kind);
+check(B.context&&B.context.gen=='pk_sentence'&&B.context.answer,'the question on the screen is attached as context');
+check(sent.h.prefer=='return=minimal'&&!!sent.h.apikey,'insert-only request with the public key');
+check(await p.evaluate(()=>/נשלחה/.test(document.querySelector('#fbBox')?.innerText||'')),'the "thank you, sent" message is shown');
+console.log(errs);check(errs.length==0,'no JavaScript errors on the page: '+JSON.stringify(errs));await b.close();done('tfb')})();
