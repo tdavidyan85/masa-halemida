@@ -2344,8 +2344,11 @@ const FEEDBACK={url:'https://gwfacvvmlrkmfkstqpkb.supabase.co/rest/v1/feedback',
 const FB_KINDS=['טעות בשאלה או בתשובה','ההקראה','משהו לא עובד','קשה או לא ברור','רעיון לשיפור','אחר'];
 function fbBrowser(){const u=navigator.userAgent;return (/Edg\//.test(u)?'Edge':/Chrome\//.test(u)?'Chrome':/Safari\//.test(u)?'Safari':/Firefox\//.test(u)?'Firefox':'other')+(/Mobi|Android|iPhone/.test(u)?' mobile':' desktop')}
 function fbContext(){const c={mode:SS&&SS.mode||'home',voice:voiceOK(),rate:ST.settings.rate,muted:!!ST.settings.mute};
-  try{if(SS&&SS.q&&view.querySelector('#partZone')){const pt=SS.q.parts[SS.part]||{};c.gen=SS.q.gen;c.q=String(SS.q.rec||'').slice(0,80);c.text=htmlToSpeechSafe(SS.q.text+' '+(SS.q.visual||'')).slice(0,200);
-    c.step=htmlToSpeechSafe(pt.prompt||'').slice(0,120);c.answer=String(pt.answer||'').slice(0,40);c.part=SS.part;c.exam=SS.examId||null;const f=(SS.fails||[]).slice(-1)[0];if(f)c.given=String(f.given).slice(0,40)}}catch(e){}
+  // adjacent elements (e.g. a sentence and its translation) come out of htmlToSpeech glued together ("late.סבתא");
+  // for the note only, put a space after .?!:;, before a letter and between Hebrew and English letters – digits are never split
+  const sp=t=>String(t).replace(/([.?!:;,])(?=[A-Za-zא-ת])/g,'$1 ').replace(/([A-Za-z])(?=[א-ת])|([א-ת])(?=[A-Za-z])/g,'$1$2 ');
+  try{if(SS&&SS.q&&view.querySelector('#partZone')){const pt=SS.q.parts[SS.part]||{};c.gen=SS.q.gen;c.q=String(SS.q.rec||'').slice(0,80);c.text=sp(htmlToSpeechSafe(SS.q.text+' '+(SS.q.visual||''))).slice(0,200);
+    c.step=sp(htmlToSpeechSafe(pt.prompt||'')).slice(0,120);c.answer=String(pt.answer||'').slice(0,40);c.part=SS.part;c.exam=SS.examId||null;const f=(SS.fails||[]).slice(-1)[0];if(f)c.given=String(f.given).slice(0,40)}}catch(e){}
   return c}
 function feedbackBox(){
   if(document.getElementById('fbBox'))return;const ctx=fbContext();

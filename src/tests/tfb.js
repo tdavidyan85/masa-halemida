@@ -15,6 +15,7 @@ check(B.subject=='english','subject is english');
 check(B.message=='התשובה בשאלה הזאת נראית לי לא נכונה','the message is sent as typed');
 check(/^הורה · /.test(B.kind),'who wrote it (parent) is part of the kind: '+B.kind);
 check(B.context&&B.context.gen=='pk_sentence'&&B.context.answer,'the question on the screen is attached as context');
+check(!/[.?!:;,][A-Za-zא-ת]|[A-Za-z][א-ת]|[א-ת][A-Za-z]/.test(B.context.text||''),'the context text keeps a space between the sentence and its translation: '+B.context.text);
 check(sent.h.prefer=='return=minimal'&&!!sent.h.apikey,'insert-only request with the public key');
 check(await p.evaluate(()=>/נשלחה/.test(document.querySelector('#fbBox')?.innerText||'')),'the "thank you, sent" message is shown');
 console.log(errs);check(errs.length==0,'no JavaScript errors on the page: '+JSON.stringify(errs));await b.close();done('tfb')})();
