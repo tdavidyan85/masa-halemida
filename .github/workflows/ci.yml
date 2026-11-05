@@ -7,6 +7,7 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:       # run it by hand from the Actions tab
 
 permissions:
   contents: read
@@ -40,6 +41,31 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      # the files GitHub Pages serves must be exactly what the build makes from src/
+      # (catches a forgotten `npm run publish-site`, a hand-edited site file, or two copies of a pack that drifted apart)
+      - name: Site files match the build
+        run: |
+          fail=0
+          same() {  # same <built or source file> <file in the site> <what to do if they differ>
+            if cmp -s "$1" "$2"; then echo "✓ ${2#../} matches src/$1"
+            else echo "::error file=${2#../}::${2#../} differs from src/$1 – $3"; fail=1; fi
+          }
+          fix="run 'npm run publish-site' in src/ and commit"
+          same deploy/index.min.html ../math/index.html "$fix"
+          same deploy/english.min.html ../english/index.html "$fix"
+          same deploy/root.html ../index.html "copy src/deploy/root.html to index.html and commit"
+          for f in ../packs/*.json; do same "packs/$(basename "$f")" "$f" "keep the two copies of the pack the same"; done
+          exit $fail
+
+      # every content pack must load and make questions in the real engine;
+      # tools/validate-pack.js needs Playwright, which is installed in src/node_modules
+      - name: Validate content packs
+        run: |
+          for f in ../packs/*.json; do
+            echo "== ${f#../}"
+            NODE_PATH="$PWD/node_modules" node ../tools/validate-pack.js "$f"
+          done
 
       # run-all.js exits 1 if any test fails, so the job fails; the full output is also kept as a log file
       - name: Test
