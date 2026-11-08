@@ -13,6 +13,14 @@
   --f-body:'Varela Round',Arial,sans-serif;
   color-scheme:light;
 }
+/* reading options (parents corner): bigger text, airy spacing, plain font. Screen only. */
+@media screen{
+  html[data-rd-big="1"] body{font-size:24px}
+  html[data-rd-big="1"] .opt,html[data-rd-big="1"] .key{font-size:1.15em}
+  html[data-rd-space="1"] body{line-height:1.9;letter-spacing:.03em;word-spacing:.12em}
+  html[data-rd-plain="1"]{--f-display:Arial,'Segoe UI',sans-serif;--f-body:Arial,'Segoe UI',sans-serif}
+  html[data-rd-plain="1"] h1,html[data-rd-plain="1"] h2,html[data-rd-plain="1"] h3{font-weight:700}
+}
 html,body{background:var(--paper);color:var(--ink)}
 body{
   font-family:var(--f-body);font-size:20px;line-height:1.55;
@@ -677,7 +685,8 @@ function backupBox(){
     if(navigator.share){try{await navigator.share({text:t});msg('נשלח ✓');return}catch(e){}}
     window.open('https://wa.me/?text='+encodeURIComponent(t),'_blank')};
 }
-async function startApp(){if(!document.documentElement.dataset.look)document.documentElement.dataset.look='kids';try{await restoreFromHash()}catch(e){}home();setTimeout(()=>track('open'),0);if(window._restored){window._restored=false;setTimeout(()=>{coachToast(`ההתקדמות חזרה! ${kid()?kid()+', ':''}יש לך ${ST.stars||0} ⭐`)},400)}}
+function applyRead(){const r=(ST&&ST.settings&&ST.settings.read)||{},d=document.documentElement.dataset;[['big','rdBig'],['space','rdSpace'],['plain','rdPlain']].forEach(([k,n])=>{if(r[k])d[n]='1';else delete d[n]})}
+async function startApp(){if(!document.documentElement.dataset.look)document.documentElement.dataset.look='kids';try{await restoreFromHash()}catch(e){}applyRead();home();setTimeout(()=>track('open'),0);if(window._restored){window._restored=false;setTimeout(()=>{coachToast(`ההתקדמות חזרה! ${kid()?kid()+', ':''}יש לך ${ST.stars||0} ⭐`)},400)}}
 function coachToast(t){let el=document.getElementById('okToast');if(!el){el=document.createElement('div');el.id='okToast';el.style.cssText='position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:80;background:var(--good-bg);border:3px solid var(--good);border-radius:16px;padding:10px 18px;font-size:20px;box-shadow:4px 4px 0 var(--ink)';document.body.appendChild(el)}
   el.textContent=t;el.hidden=false;speak(t);setTimeout(()=>{el.hidden=true},5000)}
 document.addEventListener('pointerdown',e=>{if(e.target.closest('.say,.w,.os,#sTest'))window._askT=performance.now()},true);
@@ -2381,6 +2390,10 @@ function parentReal(){
     <h3 style="margin-top:18px">טעויות אחרונות</h3>
     ${mis.length?`<div class="tablewrap"><table><tbody>${mis.map(m=>`<tr><td>${TNAME[m.topic]}</td><td dir="auto">${m.rec}</td><td>${m.date}</td></tr>`).join('')}</tbody></table></div>`:'<p>אין עדיין טעויות.</p>'}
     <h3 style="margin-top:18px">הגדרות</h3>
+    <h3 style="margin-top:18px">נוחות קריאה</h3>
+    <label class="set"><input type="checkbox" id="rdBig" ${(ST.settings.read||{}).big?'checked':''}> טקסט גדול יותר</label>
+    <label class="set"><input type="checkbox" id="rdSpace" ${(ST.settings.read||{}).space?'checked':''}> ריווח רחב בין שורות, אותיות ומילים (עוזר לילדים עם קושי בקריאה)</label>
+    <label class="set"><input type="checkbox" id="rdPlain" ${(ST.settings.read||{}).plain?'checked':''}> גופן פשוט וברור במקום הגופן המעוצב</label>
     <label class="set"><input type="checkbox" id="sAuto" ${ST.settings.auto?'checked':''}> להקריא כל שאלה ואת התשובות אוטומטית</label>
     <label class="set"><input type="checkbox" id="sHover" ${ST.settings.hover!==false?'checked':''}> להקריא כפתור כשמשאירים עליו את העכבר</label>
     <label class="set"><input type="checkbox" id="sExamRead" ${ST.settings.examRead!==false?'checked':''}> הקראה גם במבחנים (כבו כדי לתרגל קריאה עצמית)</label>
@@ -2395,6 +2408,8 @@ function parentReal(){
     <div class="actions"><button class="big sec" id="back">חזרה</button><button class="iconbtn" id="reset">איפוס התקדמות</button></div>
   </section>`;
   const $=s=>view.querySelector(s);
+  const rd=(k,e)=>{ST.settings.read=ST.settings.read||{};ST.settings.read[k]=e.target.checked;save();applyRead()};
+  $('#rdBig').onchange=e=>rd('big',e);$('#rdSpace').onchange=e=>rd('space',e);$('#rdPlain').onchange=e=>rd('plain',e);
   $('#sAuto').onchange=e=>{ST.settings.auto=e.target.checked;save()};
   $('#sSound').onchange=e=>{ST.settings.sound=e.target.checked;save()};
   $('#sStats').onchange=e=>{ST.settings.noStats=!e.target.checked;save()};
