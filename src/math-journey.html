@@ -1,5 +1,6 @@
 <title>מסע הלמידה</title>
 <meta name="claude:viewport-fit-sides" content="cover">
+<meta name="theme-color" content="#7cc4ff"><link rel="manifest" href="manifest.webmanifest"><link rel="apple-touch-icon" href="../icons/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Secular+One&family=Varela+Round&display=swap">
 <style>
@@ -686,7 +687,7 @@ function backupBox(){
     window.open('https://wa.me/?text='+encodeURIComponent(t),'_blank')};
 }
 function applyRead(){const r=(ST&&ST.settings&&ST.settings.read)||{},d=document.documentElement.dataset;[['big','rdBig'],['space','rdSpace'],['plain','rdPlain']].forEach(([k,n])=>{if(r[k])d[n]='1';else delete d[n]})}
-async function startApp(){if(!document.documentElement.dataset.look)document.documentElement.dataset.look='kids';try{await restoreFromHash()}catch(e){}applyRead();home();setTimeout(()=>track('open'),0);if(window._restored){window._restored=false;setTimeout(()=>{coachToast(`ההתקדמות חזרה! ${kid()?kid()+', ':''}יש לך ${ST.stars||0} ⭐`)},400)}}
+async function startApp(){if(!document.documentElement.dataset.look)document.documentElement.dataset.look='kids';try{await restoreFromHash()}catch(e){}applyRead();try{if(/^https?:$/.test(location.protocol)&&navigator.serviceWorker)navigator.serviceWorker.register('sw.js').catch(()=>{})}catch(e){}home();setTimeout(()=>track('open'),0);if(window._restored){window._restored=false;setTimeout(()=>{coachToast(`ההתקדמות חזרה! ${kid()?kid()+', ':''}יש לך ${ST.stars||0} ⭐`)},400)}}
 function coachToast(t){let el=document.getElementById('okToast');if(!el){el=document.createElement('div');el.id='okToast';el.style.cssText='position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:80;background:var(--good-bg);border:3px solid var(--good);border-radius:16px;padding:10px 18px;font-size:20px;box-shadow:4px 4px 0 var(--ink)';document.body.appendChild(el)}
   el.textContent=t;el.hidden=false;speak(t);setTimeout(()=>{el.hidden=true},5000)}
 document.addEventListener('pointerdown',e=>{if(e.target.closest('.say,.w,.os,#sTest'))window._askT=performance.now()},true);
@@ -2335,6 +2336,16 @@ function shop(){
 }
 
 /* ================= PARENT REPORT ================= */
+/* progress over time: accuracy from the first try in the first practice days vs the latest ones (needs enough data, otherwise says nothing) */
+function trendLine(){
+  const ts=k=>{const [y,m,d]=k.split('-').map(Number);return new Date(y,m-1,d).getTime()};
+  const days=Object.entries(ST.daily||{}).filter(([,x])=>x&&x.n).sort((a,b)=>ts(a[0])-ts(b[0]));
+  if(days.length<10)return '';
+  const sum=a=>a.reduce((s,[,x])=>({n:s.n+x.n,f:s.f+x.first}),{n:0,f:0});
+  const h=Math.min(7,Math.floor(days.length/2)),A=sum(days.slice(0,h)),B=sum(days.slice(-h));
+  if(A.n<20||B.n<20)return '';
+  const a=Math.round(A.f/A.n*100),b=Math.round(B.f/B.n*100),d=b-a;
+  return `📈 מגמה: בימי התרגול הראשונים ${a}% נכון מהפעם הראשונה, ובאחרונים ${b}%${d>=5?' (שיפור)':d<=-5?' (ירידה, כדאי לבדוק מה קשה)':' (יציב)'}`}
 function buildReport(){
   const days=[];for(let i=0;i<7;i++){const d=new Date();d.setDate(d.getDate()-i);days.push(`${d.getFullYear()}-${d.getMonth()+1}-${d.getDate()}`)}
   const D=ST.daily||{};let n7=0,f7=0,act=0;days.forEach(k=>{if(D[k]&&D[k].n){act++;n7+=D[k].n;f7+=D[k].first}});
@@ -2348,6 +2359,7 @@ function buildReport(){
     `📅 שבוע אחרון: ${act} ימי תרגול, ${n7} שאלות${n7?`, ${Math.round(f7/n7*100)}% נכון מהפעם הראשונה`:''}`,
     `💪 חזק ב: ${strong.length?strong.join(', '):'עוד אין מספיק נתונים'}`,
     `🎯 צריך חיזוק ב: ${weakL.length?weakL.join(', '):'אין כרגע נושא בולט'}`];
+  const tr=trendLine();if(tr)L.push(tr);
   if(mt.length)L.push(`⚠️ טעויות שחוזרות: ${mt.join('; ')}`);
   if(exLv)L.push(`🚀 ${exLv} סוגי שאלות כבר ברמת מבחן`);
   if(ex.length)L.push(`📝 ${ex.join(' · ')}`);

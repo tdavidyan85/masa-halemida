@@ -4,7 +4,7 @@
   "scripts": {
     "build": "python3 build.py && node minify.js && python3 build_pack.py packs/english-pronouns.json english && node minify.js deploy/english.html deploy/english.min.html && python3 build_pack.py packs/math-fractions.json fractions && node minify.js deploy/fractions.html deploy/fractions.min.html && python3 build_packpage.py && node minify.js deploy/pack.html deploy/pack.min.html && node -e \"require('fs').copyFileSync('scan.html','deploy/scan.html')\"",
     "test": "node tests/run-all.js",
-    "publish-site": "npm run build && cp deploy/index.min.html ../math/index.html && cp deploy/english.min.html ../english/index.html && mkdir -p ../fractions && cp deploy/fractions.min.html ../fractions/index.html"
+    "publish-site": "npm run build && cp deploy/index.min.html ../math/index.html && cp deploy/english.min.html ../english/index.html && mkdir -p ../fractions && cp deploy/fractions.min.html ../fractions/index.html && for d in math english fractions; do cp sw.js ../$d/sw.js; done"
   },
   "devDependencies": { "esbuild": "^0.24.0", "playwright": "^1.48.0" }
 }
