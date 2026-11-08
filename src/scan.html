@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<title>מסע הלמידה · יחידה חדשה מדף</title>
+<style>
+:root{--ink:#1b2a4a;--mut:#5b6b8a;--bg:#f4f7fb;--card:#fff;--line:#d6deea;--or:#ff7a1a;--gr:#1f9d55;--grbg:#e3f6ea;--rd:#d64545;--warn:#fff3c4;--warnl:#e8c547}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:18px/1.55 Arial,sans-serif;padding:16px 16px 120px}
+main{max-width:640px;margin:0 auto}h1{font-size:26px;margin:6px 0 10px}h2{font-size:20px;margin:22px 0 8px}p{margin:8px 0}
+a{color:var(--ink)}
+.card{background:var(--card);border:2px solid var(--line);border-radius:18px;padding:16px;margin:12px 0}
+button,.btn{font:bold 18px Arial;border:3px solid var(--ink);border-radius:14px;padding:12px 18px;background:var(--or);color:#fff;cursor:pointer;margin:4px 0;min-height:48px}
+button.big{width:100%;font-size:21px;padding:16px}button.g{background:var(--gr)}button.w{background:var(--card);color:var(--ink)}button.r{background:var(--card);color:var(--rd);border-color:var(--rd)}button.s{font-size:15px;padding:6px 12px;min-height:40px}
+button:disabled{opacity:.5}button:focus-visible,input:focus-visible,textarea:focus-visible{outline:4px solid #4c8dff;outline-offset:2px}
+input,textarea{font:inherit;width:100%;border:2px solid var(--line);border-radius:10px;padding:10px;background:var(--card);color:var(--ink)}textarea{min-height:72px}
+.note{color:var(--mut);font-size:16px}.warn{background:var(--warn);border:2px solid var(--warnl);border-radius:14px;padding:10px 12px;margin:8px 0;font-size:16px}.err{background:#ffe3e3;border-color:var(--rd)}
+[hidden]{display:none!important}
+/* home */
+.hero{text-align:center;padding:8px 0 4px}.hero .owl{font-size:64px;line-height:1}.hero h1{margin:6px 0 4px}.hero p{color:var(--mut)}
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:14px 0;text-align:center}.steps div{background:var(--card);border:2px solid var(--line);border-radius:14px;padding:10px 4px;font-size:15px}.steps b{display:block;font-size:26px}
+/* waiting */
+.wait{text-align:center;padding:30px 10px}.wait .owl{font-size:72px;animation:bob 1.2s ease-in-out infinite}@keyframes bob{50%{transform:translateY(-10px) rotate(-6deg)}}
+.dots span{display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--or);margin:0 4px;animation:dot 1.2s infinite}.dots span:nth-child(2){animation-delay:.2s}.dots span:nth-child(3){animation-delay:.4s}@keyframes dot{50%{opacity:.2}}
+@media (prefers-reduced-motion:reduce){.wait .owl,.dots span{animation:none}}
+/* review */
+.sum{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:4px 0 8px}.pill{border-radius:999px;padding:4px 12px;font-size:15px;font-weight:bold;border:2px solid var(--line);background:var(--card)}.pill.ok{background:var(--grbg);border-color:var(--gr);color:#14663a}
+details.card>summary{cursor:pointer;font-weight:bold;list-style:none}details.card>summary::-webkit-details-marker{display:none}details.card[open]>summary{margin-bottom:8px}
+.q{background:var(--card);border:2px solid var(--line);border-radius:18px;padding:14px;margin:10px 0}.qh{display:flex;gap:10px;align-items:flex-start}
+.num{flex:0 0 auto;width:34px;height:34px;border-radius:50%;background:var(--ink);color:var(--card);display:grid;place-items:center;font-weight:bold;font-size:16px}.qt{font-size:20px;font-weight:bold;flex:1;overflow-wrap:anywhere}
+.opts{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 6px;padding-inline-start:44px}.chip{border:2px solid var(--line);border-radius:12px;padding:6px 14px;font-size:18px;background:var(--bg)}.chip.right{background:var(--grbg);border-color:var(--gr);font-weight:bold;color:#14663a}
+.qa{display:flex;gap:8px;padding-inline-start:44px}.edit{margin-top:10px;border-top:2px dashed var(--line);padding-top:10px}.edit label{display:block;color:var(--mut);font-size:15px;margin-top:8px}
+.row{display:flex;gap:10px;align-items:center;margin:6px 0}.row input[type=radio]{flex:0 0 26px;width:26px;height:26px}.row input[type=text],.row input:not([type]){flex:1}
+.bar{position:fixed;inset-inline:0;bottom:0;background:var(--card);border-top:3px solid var(--ink);padding:10px 16px calc(10px + env(safe-area-inset-bottom));display:flex;gap:10px;z-index:5}.bar button{flex:1;margin:0}
+.share input{direction:ltr;text-align:left}
+@media (prefers-color-scheme:dark){:root{--ink:#e8eefb;--mut:#a3b1cc;--bg:#101826;--card:#182235;--line:#2e3d58;--warn:#3b3414;--warnl:#8a7425;--grbg:#17382a}.err{background:#3d1c1c}.pill.ok,.chip.right{color:#8ee6b0}button{color:#fff}button.w,button.r{color:var(--ink)}button.r{color:#ff8f8f}}
+</style>
+</head>
+<body><main id="m"></main>
+<script>
+const API='https://gwfacvvmlrkmfkstqpkb.supabase.co/functions/v1/ingest';
+const BASE=location.pathname.replace(/scan\/?(index\.html)?$/,'');
+const $=s=>document.querySelector(s),M=$('#m');
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+/* the pack's mini-markup shown the way the child sees it: no tags in front of the parent */
+const nice=s=>esc(s).replace(/&lt;en&gt;(.*?)&lt;\/en&gt;/g,'<span dir="ltr">$1</span>').replace(/&lt;\/?(m|f|mx)&gt;/g,'').replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/___/g,'_____');
+const store={get(k,d){try{return JSON.parse(localStorage.getItem(k))??d}catch(e){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
+/* a random device token: counts the monthly pages, never identifies a person */
+function device(){let d=store.get('mj-owner',null);if(!d){d=Array.from(crypto.getRandomValues(new Uint8Array(18)),b=>b.toString(16).padStart(2,'0')).join('');store.set('mj-owner',d)}return d}
+const MSG={owner_cap:'הגעתם למכסה החודשית של הדפים. אפשר להמשיך בחודש הבא.',monthly_cap:'השירות מלא החודש. נסו שוב בחודש הבא.',unreadable:'לא הצלחנו לקרוא את הדף. צלמו שוב, ישר ובאור טוב.',size:'התמונה גדולה מדי.',not_configured:'השירות עוד לא מופעל.',model:'שירות הקריאה לא זמין כרגע. נסו שוב עוד רגע.',type:'צריך תמונה (JPG או PNG).'};
+/* shrink + re-encode in the browser: also drops EXIF (location, time, device) before anything leaves the phone */
+async function shrink(file){const bmp=await createImageBitmap(file);const k=Math.min(1,1600/Math.max(bmp.width,bmp.height));const c=document.createElement('canvas');c.width=Math.round(bmp.width*k);c.height=Math.round(bmp.height*k);
+  c.getContext('2d').drawImage(bmp,0,0,c.width,c.height);return new Promise(r=>c.toBlob(r,'image/jpeg',0.82))}
+const mine=()=>store.get('mj-scans',[]);
+const remember=(id,t,title)=>{const a=mine().filter(x=>x.id!=id);a.unshift({id,t,title,at:Date.now()});store.set('mj-scans',a.slice(0,30))};
+const forget=id=>store.set('mj-scans',mine().filter(x=>x.id!=id));
+
+function home(msg){
+  const list=mine();
+  M.innerHTML=`<div class="hero"><div class="owl">🦉</div><h1>יחידה חדשה מדף עבודה</h1><p>מצלמים דף, ומקבלים תרגול עם הקראה.</p></div>
+  <div class="steps"><div><b>📷</b>1. מצלמים</div><div><b>👀</b>2. בודקים</div><div><b>🎮</b>3. הילד משחק</div></div>
+  <div class="warn">🔒 <b>צלמו בלי השם של הילד</b> (אפשר לכסות אותו באצבע). התמונה נשלחת לקריאה ולא נשמרת. שמות בתוכן מוחלפים בשמות כלליים.</div>
+  ${msg?`<div class="warn err" role="alert">${esc(msg)}</div>`:''}
+  <input id="f" type="file" accept="image/*" capture="environment" hidden>
+  <button class="big" id="go">📷 לצלם או לבחור תמונה</button>
+  ${list.length?`<h2>היחידות שלי</h2>`+list.map(x=>`<div class="card"><div class="row"><div style="flex:1"><b>${esc(x.title||'יחידה')}</b><div class="note">${new Date(x.at).toLocaleDateString('he-IL')}</div></div><button class="w s" data-open="${esc(x.id)}" style="flex:0 0 auto">פתיחה</button></div></div>`).join(''):''}
+  <p class="note" style="margin-top:22px"><a href="${BASE}about.html">להורים ולמורים · פרטיות</a></p>`;
+  $('#go').onclick=()=>$('#f').click();$('#f').onchange=e=>e.target.files[0]&&upload(e.target.files[0]);
+  M.querySelectorAll('[data-open]').forEach(b=>b.onclick=()=>openPack(b.dataset.open));
+}
+function waiting(t){M.innerHTML=`<div class="wait" role="status"><div class="owl">🦉</div><h1>${t}</h1><p class="note">זה לוקח כחצי דקה. אפשר להשאיר את המסך פתוח.</p><div class="dots"><span></span><span></span><span></span></div></div>`}
+async function upload(file){
+  waiting('קוראים את הדף ובונים יחידה…');
+  try{const blob=await shrink(file);
+    const r=await fetch(API+'?a=new',{method:'POST',headers:{'content-type':'image/jpeg','x-device':device()},body:blob});const j=await r.json().catch(()=>({}));
+    if(!r.ok)throw new Error(MSG[j.error]||j.notes||'משהו השתבש. נסו שוב.');
+    remember(j.id,j.token,j.pack?.subject?.unit||j.pack?.subject?.name);review(j.id,j.token,j.pack,j.flags,'draft')
+  }catch(e){home(e.message)}
+}
+async function openPack(id){const t=(mine().find(x=>x.id==id)||{}).t;waiting('פותחים את היחידה…');
+  try{const r=await fetch(API+'?a=get&id='+id+'&t='+encodeURIComponent(t||''));if(!r.ok)throw 0;const j=await r.json();review(id,t,j.pack,j.flags||{},j.status)}catch(e){home('לא הצלחנו לפתוח את היחידה.')}}
+
+let CUR=null;
+const itemsOf=(pool)=>Array.isArray(pool)?pool:(pool.items||[]);
+const optV=o=>typeof o=='string'?o:o.v,optT=o=>typeof o=='string'?o:(o.t??o.v);
+const playUrl=id=>location.origin+BASE+'pack/?pack='+id;
+function review(id,t,pack,flags,status){
+  CUR={id,t,pack,status};
+  const f=flags||{},probs=(f.problems||[]),topics=(pack.topics||[]);
+  const nq=Object.values(pack.pools||{}).reduce((n,p)=>n+itemsOf(p).length,0);
+  M.innerHTML=`<h1>בודקים ומאשרים</h1>
+  <div class="sum"><span class="pill">📄 ${nq} שאלות</span><span class="pill">📚 ${topics.length} נושאים</span><span class="pill ${status=='approved'?'ok':''}" id="pst">${status=='approved'?'✅ מאושר':'📝 טיוטה'}</span></div>
+  <p class="note" id="stline">${status=='approved'?'הילד יכול לשחק בקישור.':'הילד עדיין לא רואה את היחידה. עוברים על השאלות, מתקנים אם צריך, ומאשרים.'}</p>
+  ${f.notes?`<div class="warn">💬 ${esc(f.notes)}</div>`:''}
+  ${f.namesReplaced?`<div class="warn">🔒 הוחלפו ${f.namesReplaced} שמות בשמות כלליים. בדקו שלא נשאר שם של ילד.</div>`:''}
+  ${f.contactsRemoved?`<div class="warn">🔒 הוסרו מספרי טלפון או כתובות.</div>`:''}
+  ${probs.length?`<div class="warn err">יש בעיות לתיקון: ${probs.map(esc).join(' · ')}</div>`:''}
+  <div class="card"><label for="ttl"><b>שם היחידה</b></label><input id="ttl" value="${esc(pack.subject?.unit||'')}"></div>
+  ${topics.map((tp,ti)=>`<h2>${esc(tp.glyph||'')} ${esc(tp.name)}</h2>`
+    +(tp.lessons||[]).map((l,li)=>`<details class="card"><summary>📖 שיעור: ${esc(l.title)}</summary><textarea data-l="${ti},${li}" aria-label="טקסט השיעור">${esc(l.text)}</textarea></details>`).join('')
+    +(tp.skills||[]).map(s=>{const pool=pack.pools?.[s.pool];if(!pool)return'';return `<p class="note"><b>${esc(s.name)}</b></p>`+itemsOf(pool).map((it,ii)=>itemHtml(s.pool,it,ii)).join('')}).join('')).join('')}
+  <div class="card share" id="share" ${status=='approved'?'':'hidden'}><b>קישור לילד</b><p class="note">שולחים לילד, או פותחים אצלו במכשיר.</p><input id="lnk" readonly value="${esc(playUrl(id))}" aria-label="קישור לילד"><button class="w" id="cp">📋 שיתוף / העתקה</button><br><button class="r s" id="un">ביטול האישור</button></div>
+  <div class="card"><button class="w s" id="sv">💾 שמירה כטיוטה</button> <button class="r s" id="del">🗑️ מחיקת היחידה</button> <button class="w s" onclick="home()">חזרה</button> <span id="msg" class="note" role="status"></span></div>
+  <div class="bar"><button class="w" id="pv">👀 תצוגה</button><button class="g" id="ap">✅ הכול טוב, לאשר</button></div>`;
+  $('#pv').onclick=async()=>{if(await save(false,true))window.open(BASE+'pack/?pack='+id+'&t='+encodeURIComponent(t),'_blank')};
+  $('#sv').onclick=()=>save(false);$('#ap').onclick=async()=>{if(await save(true))$('#share').scrollIntoView({behavior:'smooth',block:'center'})};$('#un').onclick=()=>save(false);
+  $('#cp').onclick=async()=>{const u=$('#lnk').value;try{if(navigator.share)await navigator.share({title:'מסע הלמידה',url:u});else{await navigator.clipboard.writeText(u);$('#msg').textContent='הועתק ✓'}}catch(e){}};
+  $('#del').onclick=async()=>{if(!confirm('למחוק את היחידה לצמיתות?'))return;await fetch(API+'?a=delete',{method:'POST',body:JSON.stringify({id,t})});forget(id);home()};
+  M.querySelectorAll('.q').forEach((d,i)=>{d.querySelector('.num').textContent=i+1});
+}
+function chips(it){return (it.options||[]).map(o=>`<span class="chip ${String(optV(o))==String(it.answer)?'right':''}">${String(optV(o))==String(it.answer)?'✓ ':''}${nice(optT(o))}</span>`).join('')}
+function itemHtml(pn,it,ii){
+  const opts=(it.options||[]),free=it.type&&it.type!='choice';
+  return `<div class="q item" data-pool="${esc(pn)}" data-i="${ii}"><div class="qh"><span class="num"></span><div class="qt">${nice(it.text??it.visual??'')}</div></div>
+  <div class="opts">${free?`<span class="chip right">✓ ${nice(it.answer)}</span>`:chips(it)}</div>
+  <div class="qa"><button class="w s" data-ed="1">✏️ תיקון</button><button class="r s" data-rm="1">🗑️ מחיקה</button></div>
+  <div class="edit" hidden><label>השאלה</label><textarea data-f="text">${esc(it.text??it.visual??'')}</textarea>
+  ${free?`<label>התשובה</label><input data-f="answer" value="${esc(it.answer)}">`:`<label>האפשרויות (מסמנים את הנכונה)</label>`+opts.map((o,k)=>`<div class="row"><input type="radio" name="a${pn}${ii}" value="${k}" aria-label="תשובה נכונה" ${String(optV(o))==String(it.answer)?'checked':''}><input data-o="${k}" value="${esc(optT(o))}" aria-label="אפשרות ${k+1}"></div>`).join('')}
+  <button class="g s" data-done="1">✔ סיום התיקון</button></div></div>`}
+/* read the editor back into the pack */
+function readItem(div){const it=itemsOf(CUR.pack.pools[div.dataset.pool])[div.dataset.i];
+  it.text=div.querySelector('[data-f=text]').value;
+  const ans=div.querySelector('[data-f=answer]');if(ans){it.answer=ans.value}else{[...div.querySelectorAll('[data-o]')].forEach((o,k)=>{if(typeof it.options[k]=='string')it.options[k]=o.value;else it.options[k].t=o.value});
+    const ck=div.querySelector('input[type=radio]:checked');if(ck)it.answer=optV(it.options[ck.value]);else it.answer=optV(it.options[0])}
+  return it}
+function collect(){const p=CUR.pack;p.subject=p.subject||{};p.subject.unit=$('#ttl').value.trim().slice(0,80);
+  M.querySelectorAll('[data-l]').forEach(el=>{const[a,b]=el.dataset.l.split(',');p.topics[a].lessons[b].text=el.value});
+  const del={};
+  M.querySelectorAll('.item').forEach(div=>{const items=itemsOf(p.pools[div.dataset.pool]);if(div.dataset.gone){(del[div.dataset.pool]=del[div.dataset.pool]||[]).push(items[div.dataset.i]);return}readItem(div)});
+  for(const [pn,gone] of Object.entries(del)){const pool=p.pools[pn];const keep=itemsOf(pool).filter(x=>!gone.includes(x));if(Array.isArray(pool))p.pools[pn]=keep;else pool.items=keep}
+  return p}
+M.addEventListener('click',e=>{const d=e.target.closest('.item');if(!d)return;
+  if(e.target.closest('[data-rm]')){if(confirm('למחוק את השאלה?')){d.dataset.gone=1;d.hidden=true;M.querySelectorAll('.q:not([hidden])').forEach((x,i)=>{x.querySelector('.num').textContent=i+1})}}
+  else if(e.target.closest('[data-ed]')){const ed=d.querySelector('.edit');ed.hidden=!ed.hidden}
+  else if(e.target.closest('[data-done]')){const it=readItem(d);d.querySelector('.qt').innerHTML=nice(it.text);const free=it.type&&it.type!='choice';d.querySelector('.opts').innerHTML=free?`<span class="chip right">✓ ${nice(it.answer)}</span>`:chips(it);d.querySelector('.edit').hidden=true}});
+async function save(approve,quiet){
+  const pack=collect();$('#msg').textContent='שומר…';
+  try{const r=await fetch(API+'?a=save',{method:'POST',body:JSON.stringify({id:CUR.id,t:CUR.t,pack,approve})});const j=await r.json().catch(()=>({}));
+    if(!r.ok)throw new Error(j.problems?('צריך לתקן: '+j.problems.slice(0,3).join(' · ')):'השמירה נכשלה');
+    remember(CUR.id,CUR.t,pack.subject.unit);CUR.status=j.status;$('#msg').textContent=quiet?'':(approve?'אושר ✓':'נשמר ✓');
+    const ok=j.status=='approved';$('#share').hidden=!ok;$('#pst').textContent=ok?'✅ מאושר':'📝 טיוטה';$('#pst').classList.toggle('ok',ok);$('#stline').textContent=ok?'הילד יכול לשחק בקישור.':'הילד עדיין לא רואה את היחידה.';return true
+  }catch(e){$('#msg').textContent='';alert(e.message);return false}}
+home();
+</script>
+</body></html>

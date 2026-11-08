@@ -40,7 +40,9 @@ Deno.serve(async (req) => {
   if (!(r >= 0.5 && r <= 1.3)) r = 0.8;
   if (!t || t.length > 400) return json(400, { error: "text" });
 
-  const path = `v1/${v}/${await sha(`${v}|${r}|${t}`)}.mp3`;
+  // packs made from photos (n=p) use their own cache folder, so text from a family's worksheet never mixes with the shared one
+  const ns = u.searchParams.get("n") === "p" ? "p1" : "v1";
+  const path = `${ns}/${v}/${await sha(`${v}|${r}|${t}`)}.mp3`;
   const obj = `${SB}/storage/v1/object/tts/${path}`;
   const auth = { apikey: SR, Authorization: `Bearer ${SR}` };
   const cached = await fetch(obj, { headers: auth });

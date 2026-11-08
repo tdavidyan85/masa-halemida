@@ -111,6 +111,53 @@ h2.sec-t{font-family:var(--f-display);font-weight:400;font-size:26px;margin:26px
 .opt:disabled{cursor:default}
 .opt.wrong{background:var(--bad-bg);border-color:var(--bad);opacity:.6;box-shadow:none}
 .opt.right{background:var(--good-bg);border-color:var(--good);box-shadow:0 0 0 4px var(--good)}
+/* board mechanics (sort / match / order / tap / cells). One colour = one meaning: items are neutral sand until they sit in a group, then take the group's colour.
+   Look "kids" (default) or "teen" (calmer, flat) is set on <html data-look> from the pack's class. */
+:root{--bd-sand:#f1e4c6;--bd-sandd:#cdb98a;--bd-off:#fff4dc;--bd-cut:#fffdf6;--bd-on:url(#bdck);
+  --bd-k0:#d9c9ff;--bd-k0d:#a487ea;--bd-k1:#ffe08a;--bd-k1d:#d9b341;--bd-k2:#a9ecd0;--bd-k2d:#43b58a;--bd-k3:#bfe3ff;--bd-k3d:#5aa9e6;--bd-k4:#ffc9d6;--bd-k4d:#e0708f;--bd-k5:#ffd5b0;--bd-k5d:#e0914f;
+  --bd-b0:#f1e9ff;--bd-b1:#fff3cf;--bd-b2:#dcf7ea;--bd-b3:#e3f3ff;--bd-b4:#ffe6ec;--bd-b5:#ffeedd}
+html[data-look="teen"]{--bd-sandd:#c9bb98;--bd-off:#eef0f8;--bd-cut:#fff;--bd-on:#e3a54f}
+.bd{display:grid;gap:14px;width:100%}
+.opt.bd-chip{--cbg:var(--bd-sand);--cd:var(--bd-sandd);background:var(--cbg);border:0;border-radius:16px;box-shadow:0 5px 0 var(--cd);min-height:54px;font-size:22px;padding:8px 14px;flex:0 1 auto}
+.opt.bd-chip:hover:not(:disabled){background:var(--cbg);transform:translateY(-2px)}
+.bd-chip[data-k="0"]{--cbg:var(--bd-k0);--cd:var(--bd-k0d)}.bd-chip[data-k="1"]{--cbg:var(--bd-k1);--cd:var(--bd-k1d)}.bd-chip[data-k="2"]{--cbg:var(--bd-k2);--cd:var(--bd-k2d)}
+.bd-chip[data-k="3"]{--cbg:var(--bd-k3);--cd:var(--bd-k3d)}.bd-chip[data-k="4"]{--cbg:var(--bd-k4);--cd:var(--bd-k4d)}.bd-chip[data-k="5"]{--cbg:var(--bd-k5);--cd:var(--bd-k5d)}
+.opt.bd-chip.sel{background:var(--cbg);transform:translateY(-4px) scale(1.06);box-shadow:0 9px 0 var(--cd),0 0 0 4px var(--card),0 0 0 8px var(--accent)}
+.opt.bd-chip.right{background:var(--cbg);opacity:1;box-shadow:0 5px 0 var(--cd),0 0 0 3px var(--good)}
+.opt.bd-chip.wrong{background:var(--cbg);opacity:1;box-shadow:0 5px 0 var(--cd),0 0 0 3px var(--bad);animation:bdshake .4s}
+.opt.bd-chip.miss{border:2px dashed var(--good)}
+.opt.bd-chip.bd-empty{background:transparent;box-shadow:none;border:2px dashed var(--line);opacity:.6}
+.bd-chip.right::after,.bd-chip.wrong::after,.bd-tok.right::after,.bd-tok.wrong::after{position:absolute;top:-9px;inset-inline-end:-9px;width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font:700 13px/1 system-ui,sans-serif;color:#fff}
+.bd-chip.right::after,.bd-tok.right::after{content:"✓";background:var(--good)}.bd-chip.wrong::after,.bd-tok.wrong::after{content:"✗";background:var(--bad)}
+.bd-tray,.bd-chips,.bd-row{display:flex;flex-wrap:wrap;gap:10px;justify-content:center}
+.bd-bins{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px}
+.bd-bin{--bbg:var(--card);border-radius:22px;padding:8px;min-height:96px;background:var(--bbg);border:0}
+.bd-bin[data-k="0"]{--bbg:var(--bd-b0)}.bd-bin[data-k="1"]{--bbg:var(--bd-b1)}.bd-bin[data-k="2"]{--bbg:var(--bd-b2)}.bd-bin[data-k="3"]{--bbg:var(--bd-b3)}.bd-bin[data-k="4"]{--bbg:var(--bd-b4)}.bd-bin[data-k="5"]{--bbg:var(--bd-b5)}
+.bd-binh{display:block;width:100%;font:inherit;font-family:var(--f-display);font-size:18px;background:var(--card);border:0;border-radius:999px;box-shadow:0 3px 0 rgba(27,42,74,.12);cursor:pointer;padding:6px 8px;color:inherit;margin-bottom:8px}
+.bd-cols{display:grid;grid-template-columns:1fr 1fr;gap:14px}.bd-col{display:grid;gap:10px;align-content:start}
+.bd-slot{min-width:64px}
+.bd-tok{font:inherit;font-size:24px;background:var(--card);border:3px solid transparent;border-radius:12px;padding:6px 10px;cursor:pointer;color:inherit;position:relative}
+.bd-tok:hover:not(:disabled){background:var(--hl)}.bd-tok.on{border-color:var(--accent);background:var(--hl)}
+.bd-tok.right{background:var(--good-bg);border-color:var(--good)}.bd-tok.wrong{background:var(--bad-bg);border-color:var(--bad);animation:bdshake .4s}.bd-tok.miss{border:3px dashed var(--good)}
+.bd-shape{width:150px;max-width:42vw;height:auto;overflow:visible;filter:drop-shadow(0 5px 0 rgba(27,42,74,.14))}
+.bd-cell{cursor:pointer;transform-box:fill-box;transform-origin:center;transition:transform .18s}
+.bd-cell .base{fill:var(--bd-off);stroke:var(--bd-cut);stroke-width:3.5;stroke-linejoin:round}
+.bd-cell.on .base{fill:var(--bd-on)}
+.bd-cell .tex{display:none;pointer-events:none;stroke:none}.bd-cell.on .tex{display:block}
+.bd-cell:hover{transform:scale(1.025)}.bd-cell.on{transform:scale(1.045)}
+.bd-shapes.bad .bd-cell.on .base{fill:var(--bad-bg);stroke:var(--bad)}.bd-shapes.bad .bd-cell.on .tex{display:none}
+.bd-shapes.good .bd-cell.on{animation:bdpop .5s}
+html[data-look="teen"] .bd-cell .tex{display:none!important}
+html[data-look="teen"] .bd-shape{filter:none}
+html[data-look="teen"] .opt.bd-chip{border-radius:11px;font-size:20px;box-shadow:0 2px 0 var(--cd)}
+html[data-look="teen"] .opt.bd-chip.sel{transform:translateY(-3px);box-shadow:0 4px 0 var(--cd),0 0 0 3px var(--card),0 0 0 5px var(--accent)}
+html[data-look="teen"] .opt.bd-chip.right{box-shadow:0 2px 0 var(--cd),0 0 0 3px var(--good)}
+html[data-look="teen"] .opt.bd-chip.wrong{box-shadow:0 2px 0 var(--cd),0 0 0 3px var(--bad)}
+html[data-look="teen"] .bd-bin{border-radius:14px}
+html[data-look="teen"] .bd-binh{font-family:var(--f-body);font-size:16px;font-weight:700;box-shadow:none;border-radius:10px}
+@keyframes bdshake{0%,100%{transform:translateX(0)}25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
+@keyframes bdpop{0%{transform:scale(1.045)}50%{transform:scale(1.12)}100%{transform:scale(1.045)}}
+@media (prefers-reduced-motion:reduce){.bd *{animation:none!important;transition:none!important}}
 .opt .os{position:absolute;top:6px;left:8px;font-size:16px;opacity:.75;background:var(--sun);border-radius:50%;width:28px;height:28px;display:grid;place-items:center;border:2px solid var(--ink)}
 .pad{display:grid;grid-template-columns:1fr;gap:12px;justify-items:center}
 .display{direction:ltr;min-width:260px;font-size:44px;font-variant-numeric:tabular-nums;text-align:center;background:var(--note);border:3px solid var(--ink);border-radius:16px;padding:6px 18px;min-height:76px}
@@ -362,6 +409,62 @@ select,input[type=range]{font-family:inherit;font-size:17px}
   .display{min-width:200px;font-size:34px}
 }
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+/* ===== LOOK: the whole game, set on <html data-look="kids|teen"> (from the pack's class; see bdLookOf) =====
+   Soft cards with a bottom edge instead of ink outlines; one primary colour (purple); sand options that take a colour only for meaning
+   (green = right, red = wrong, with ✓/✗). "teen" is the same layout, calmer and flatter. Screen only: printing is untouched. */
+@media screen{
+html[data-look]{--accent:#7c4dff;--accent-dk:#4b2bb5;--ink:#33295c;--muted:#5d5a7a;--line:#d6d3e8;--edge:rgba(51,41,92,.14);--r-card:28px;--r-btn:999px;--r-opt:16px}
+html[data-look="teen"]{--ink:#27304a;--muted:#59627a;--line:#d5dae6;--accent:#5b6bd6;--accent-dk:#3f4eb0;--edge:rgba(39,48,74,.10);--r-card:18px;--r-btn:12px;--r-opt:11px;--f-display:'Varela Round',Arial,sans-serif}
+html[data-look] body{background:linear-gradient(180deg,#78c8ff,#eaf7ff 70%) fixed;background-size:auto}
+html[data-look="teen"] body{background:linear-gradient(180deg,#dde5f4,#f2f5fb 70%) fixed}
+/* cards */
+html[data-look] :is(.hero,.qcard,.lesson,.panel,.map,.explain,.paper,.bubble){border:0;border-radius:var(--r-card);box-shadow:0 8px 0 var(--edge)}
+html[data-look] :is(.world,.pv,.ecard,.gcard){border:0;border-radius:calc(var(--r-card) - 6px);box-shadow:0 5px 0 var(--edge)}
+html[data-look="teen"] :is(.hero,.qcard,.lesson,.panel,.map,.explain,.paper,.bubble){box-shadow:0 2px 8px var(--edge)}
+html[data-look="teen"] :is(.world,.pv,.ecard,.gcard){box-shadow:0 1px 5px var(--edge)}
+html[data-look] .bubble{border-radius:20px;box-shadow:0 4px 0 var(--edge)}
+html[data-look] .exampaper{box-shadow:0 2px 8px var(--edge)}
+/* buttons */
+html[data-look] .big{border:0;border-radius:var(--r-btn);box-shadow:0 6px 0 rgba(0,0,0,.22);font-size:26px}
+html[data-look] .big:hover{transform:translateY(-1px);box-shadow:0 7px 0 rgba(0,0,0,.22)}
+html[data-look] .big:active{transform:translateY(4px);box-shadow:0 2px 0 rgba(0,0,0,.22)}
+html[data-look] .big.sec{background:transparent;color:var(--ink);box-shadow:inset 0 0 0 2px var(--ink)}
+html[data-look="teen"] .big{box-shadow:0 3px 0 rgba(0,0,0,.2);font-size:22px}
+html[data-look="teen"] .big:active{transform:translateY(2px);box-shadow:0 1px 0 rgba(0,0,0,.2)}
+html[data-look] .say{border:0;box-shadow:0 4px 0 #d9a21f}
+html[data-look] .iconbtn,html[data-look] .chip{border:0;box-shadow:0 3px 0 var(--edge)}
+html[data-look] .brand .subj{border:0;box-shadow:0 2px 0 var(--edge)}
+/* answers: sand until they mean something */
+html[data-look] .opt{border:0;border-radius:var(--r-opt);background:var(--bd-sand);box-shadow:0 5px 0 var(--bd-sandd)}
+html[data-look] .opt:hover:not(:disabled){background:var(--bd-sand);transform:translateY(-2px)}
+html[data-look] .opt.right{background:var(--good-bg);box-shadow:0 5px 0 var(--bd-sandd),0 0 0 3px var(--good)}
+html[data-look] .opt.wrong{background:var(--bad-bg);opacity:1;box-shadow:0 5px 0 var(--bd-sandd),0 0 0 3px var(--bad);animation:bdshake .4s}
+html[data-look] .opt.right:not(.bd-chip)::after,html[data-look] .opt.wrong:not(.bd-chip)::after{position:absolute;top:-9px;inset-inline-end:-9px;width:24px;height:24px;border-radius:50%;display:grid;place-items:center;font:700 14px/1 system-ui,sans-serif;color:#fff}
+html[data-look] .opt.right:not(.bd-chip)::after{content:"✓";background:var(--good)}
+html[data-look] .opt.wrong:not(.bd-chip)::after{content:"✗";background:var(--bad)}
+html[data-look="teen"] .opt{box-shadow:0 2px 0 var(--bd-sandd)}
+html[data-look="teen"] .opt.right{box-shadow:0 2px 0 var(--bd-sandd),0 0 0 3px var(--good)}
+html[data-look="teen"] .opt.wrong{box-shadow:0 2px 0 var(--bd-sandd),0 0 0 3px var(--bad)}
+/* number pad and inputs */
+html[data-look] .key{border:0;border-radius:var(--r-opt);background:var(--bd-sand);box-shadow:0 4px 0 var(--bd-sandd)}
+html[data-look] .key:active{transform:translateY(3px);box-shadow:0 1px 0 var(--bd-sandd)}
+html[data-look] .key.ok{background:var(--accent);color:#fff;box-shadow:0 4px 0 var(--accent-dk)}
+html[data-look] :is(.display,.fdisp){border:0;box-shadow:inset 0 0 0 2px var(--line);border-radius:var(--r-opt)}
+html[data-look] :is(.ltile){border:0;border-radius:var(--r-opt);box-shadow:0 4px 0 #d9a21f}
+html[data-look] .glyph,html[data-look] .station .ring .g{border:0;box-shadow:0 4px 0 var(--edge)}
+html[data-look] .station .lab,html[data-look] .station .pin span{border:0;box-shadow:0 2px 0 var(--edge)}
+html[data-look] :is(.rrow,.keyw div,.nvx){border:0;box-shadow:inset 0 0 0 2px var(--line)}
+html[data-look] .gobtn{border:0;border-radius:calc(var(--r-card) - 4px);box-shadow:0 7px 0 var(--accent-dk)}
+html[data-look] .gobtn:hover{transform:translateY(-1px)}
+html[data-look] .tabb{border:0;box-shadow:0 4px 0 var(--edge);border-radius:var(--r-btn)}
+html[data-look] .tabb.on{box-shadow:0 4px 0 #d9a21f}
+html[data-look] .shopband{border:0;border-radius:calc(var(--r-card) - 6px);box-shadow:0 5px 0 var(--edge)}
+html[data-look] #fbBtn{border:0;box-shadow:0 3px 0 var(--edge)}
+html[data-look="teen"] .gobtn{box-shadow:0 3px 0 var(--accent-dk)}
+html[data-look="teen"] .gobtn .gl{font-size:32px}
+html[data-look] .map{background-image:none;background:linear-gradient(180deg,#bfe9ff,#e9f9ec)}
+html[data-look="teen"] .map{background:linear-gradient(180deg,#e6ecf8,#eef6f0)}
+}
 </style>
 
 <div id="app" dir="rtl">
@@ -574,7 +677,7 @@ function backupBox(){
     if(navigator.share){try{await navigator.share({text:t});msg('נשלח ✓');return}catch(e){}}
     window.open('https://wa.me/?text='+encodeURIComponent(t),'_blank')};
 }
-async function startApp(){try{await restoreFromHash()}catch(e){}home();setTimeout(()=>track('open'),0);if(window._restored){window._restored=false;setTimeout(()=>{coachToast(`ההתקדמות חזרה! ${kid()?kid()+', ':''}יש לך ${ST.stars||0} ⭐`)},400)}}
+async function startApp(){if(!document.documentElement.dataset.look)document.documentElement.dataset.look='kids';try{await restoreFromHash()}catch(e){}home();setTimeout(()=>track('open'),0);if(window._restored){window._restored=false;setTimeout(()=>{coachToast(`ההתקדמות חזרה! ${kid()?kid()+', ':''}יש לך ${ST.stars||0} ⭐`)},400)}}
 function coachToast(t){let el=document.getElementById('okToast');if(!el){el=document.createElement('div');el.id='okToast';el.style.cssText='position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:80;background:var(--good-bg);border:3px solid var(--good);border-radius:16px;padding:10px 18px;font-size:20px;box-shadow:4px 4px 0 var(--ink)';document.body.appendChild(el)}
   el.textContent=t;el.hidden=false;speak(t);setTimeout(()=>{el.hidden=true},5000)}
 document.addEventListener('pointerdown',e=>{if(e.target.closest('.say,.w,.os,#sTest'))window._askT=performance.now()},true);
@@ -599,7 +702,7 @@ const IS_WIN=/Windows/.test(navigator.userAgent),IS_EDGE=/Edg\//.test(navigator.
 const TTS={url:'https://gwfacvvmlrkmfkstqpkb.supabase.co/functions/v1/tts',ready:false,off:false,fail:0,cache:new Map(),el:null};
 function ttsOn(){return TTS.ready&&!TTS.off&&ST.settings.cloud!=='device'}
 function ttsUrl(g,rate){const en=g.lang=='en',v=en?'jenny':(ST.settings.cloud=='avri'?'avri':'hila');
-  return TTS.url+'?l='+(en?'en':'he')+'&v='+v+'&r='+(Math.round((rate||0.8)*20)/20)+'&t='+encodeURIComponent(g.text.replace(/\s+/g,' ').trim().slice(0,400))}
+  return TTS.url+'?l='+(en?'en':'he')+'&v='+v+'&r='+(Math.round((rate||0.8)*20)/20)+(window.TTS_NS?'&n='+window.TTS_NS:'')+'&t='+encodeURIComponent(g.text.replace(/\s+/g,' ').trim().slice(0,400))}
 function ttsGet(g,rate){const u=ttsUrl(g,rate);if(TTS.cache.has(u))return TTS.cache.get(u);
   const p=fetch(u).then(r=>{if(!r.ok){if([403,429,503].includes(r.status))TTS.off=true;throw new Error('tts '+r.status)}return r.blob()}).then(b=>URL.createObjectURL(b));
   p.then(()=>{TTS.fail=0},()=>{TTS.cache.delete(u);if(++TTS.fail>=3)TTS.off=true});TTS.cache.set(u,p);if(TTS.cache.size>300){const k=TTS.cache.keys().next().value;TTS.cache.delete(k)}return p}
@@ -1942,6 +2045,7 @@ function renderPart(first){
   if(pt.kind=='frac') h+=fracPadHtml(pt);
   if(pt.kind=='col'||pt.kind=='mul') h+=`<div class="pad"><div class="visual" id="colZone"></div><div class="flabels">${pt.kind=='mul'?'מתחילים מימין (יחידות). מה שמעבירים כותבים במשבצת הקטנה למעלה.':'מתחילים מימין (יחידות). לחיצה על משבצת קטנה למעלה – לכתוב העברה או פריטה.'}</div><div class="keys">${[1,2,3,4,5,6,7,8,9,0].map(n=>`<button class="key" data-k="${n}">${n}</button>`).join('')}<button class="key del" data-k="del" aria-label="מחיקה">⌫</button><button class="key ok" data-k="ok">בדיקה ✓</button></div></div>`;
   if(pt.kind=='dots') h+=`<div class="visual" id="dotZone"></div><div class="actions" style="justify-content:center"><button class="big sec" id="dotClear">לנקות</button></div>`;
+  if(pt.kind=='board') h+=boardHtml(pt);
   h+='</div>';z.innerHTML=h;
   if(pt.kind=='col'){SS.cs={res:[],car:[],act:{row:'res',i:0},marks:null};renderCol();z.querySelectorAll('.key').forEach(b=>b.onclick=()=>ckey(b.dataset.k))}
   if(pt.kind=='spell'){SS.sp={v:[],mark:''};renderSpell();z.querySelectorAll('.key').forEach(b=>b.onclick=()=>skey(b.dataset.k))}
@@ -1949,6 +2053,7 @@ function renderPart(first){
   if(pt.kind=='mul'){SS.cs={...mulBlank(pt.m),act:{row:'r',i:0},marks:{}};pt.hint=mulHint(pt.m,0);renderMul();z.querySelectorAll('.key').forEach(b=>b.onclick=()=>mkey(b.dataset.k))}
   if(pt.kind=='frac'){SS.fr={w:'',n:'',d:''};SS.fb=String(pt.answer).includes(' ')?'w':'n';renderFrac();z.querySelectorAll('.fbox').forEach(b=>b.onclick=()=>{SS.fb=b.dataset.b;renderFrac()});z.querySelectorAll('.key').forEach(b=>b.onclick=()=>fkey(b.dataset.k))}
   if(pt.kind=='dots'){SS.sel=[];renderDots();z.querySelector('#dotClear').onclick=()=>{if(SS.locked)return;SS.sel=[];renderDots()}}
+  if(pt.kind=='board')boardInit(pt);
   const sp=z.querySelector('#sayP');if(sp)sp.onclick=e=>speakEls(readList(false),e.currentTarget);
   if(pt.kind=='choice'){
     z.querySelectorAll('.opt').forEach(b=>b.onclick=e=>{if(e.target.closest('.os'))return;answer(b.dataset.v,b)});
@@ -1973,6 +2078,7 @@ function readList(withQ){
   else if(view.querySelector('#colZone'))out.push({el:document.createElement('i'),say:'פותרים במאונך. מתחילים מהיחידות, מימין.',pause:true});
   if(view.querySelector('#partZone .fdisp'))out.push({el:document.createElement('i'),say:'כתבו את התשובה בתיבות.',pause:true});
   if(view.querySelector('#spellZone'))out.push({el:document.createElement('i'),say:'בונים את המילה מהאותיות.',pause:true});
+  if(view.querySelector('#bdZone'))out.push({el:document.createElement('i'),say:BD_SAY[SS.q.parts[SS.part].mode]||'',pause:true});
   if(view.querySelector('#dotZone'))out.push({el:document.createElement('i'),say:'לחצו על הנקודות.',pause:true});
   return out;
 }
@@ -2041,6 +2147,7 @@ function writeStep(pt,go){
   z.querySelector('#wrote').onclick=()=>{ST.copied=(ST.copied||0)+1;save();z.innerHTML='';SS.locked=false;go()};
 }
 function markRight(pt,btn){
+  if(pt.kind=='board')boardRight(pt);
   if(pt.kind=='choice'){view.querySelectorAll('.opt').forEach(b=>{b.disabled=true;if(b.dataset.v==pt.answer||b==btn)b.classList.add('right')})}
   if(pt.kind=='num'){const d=view.querySelector('#disp');if(d){d.className='display right';d.innerHTML=fmt(+pt.answer)}}
   if(pt.kind=='click'){view.querySelector('#clickZone').innerHTML=pt.markRight()}
@@ -2057,6 +2164,7 @@ function markRight(pt,btn){
     SS.cs.marks={};for(let i=0;i<W;i++)if(SS.cs.res[i])SS.cs.marks[i]='good';const was=SS.locked;SS.locked=true;renderCol();SS.locked=was}
 }
 function markWrong(pt,v,btn){
+  if(pt.kind=='board')boardWrong(pt);
   if(pt.kind=='choice'&&btn){btn.classList.add('wrong');btn.disabled=true}
   if(pt.kind=='num'){const d=view.querySelector('#disp');d.className='display wrong';SS.input='';setTimeout(()=>{if(d.isConnected&&!SS.locked){d.className='display';d.innerHTML='&nbsp;'}},900)}
   if(pt.kind=='click'){view.querySelector('#clickZone').innerHTML=pt.markWrong(v);bindClick()}
@@ -2095,6 +2203,7 @@ function breakBox(){
   d.querySelector('#stay').onclick=()=>{d.remove();nextQ()};d.querySelector('#leave').onclick=()=>{d.remove();saveSession();home()};
 }
 function ansHtml(pt){
+  if(pt.kind=='board')return boardAns(pt);
   if(pt.kind=='choice'){const o=pt.options.find(o=>String(o.val)==String(pt.answer));if(!o||/<svg/.test(o.html))return pt.pics?'מסומנת בירוק למעלה':'';return o.html}
   if(pt.kind=='num')return M(fmt(+pt.answer));if(pt.kind=='col'||pt.kind=='mul')return M(fmt(+pt.m.ans));if(pt.kind=='chain')return pt.line||M(fmt(+pt.answer));if(pt.kind=='spell')return `<span class="eng" dir="ltr">${pt.word}</span>`;if(pt.kind=='frac')return M(keyHtml(pt.answer));
   if(pt.kind=='click')return pt.answerHtml||'';if(pt.kind=='dots')return 'הנקודות שמסומנות בירוק';return ''}
@@ -2124,7 +2233,7 @@ function finishQ(firstTry,given){
   logAnswer({ts:Date.now(),date:today(),mode:SS.mode,exam:SS.examId||null,topic:q.topic,gen:q.gen,q:q.rec,firstTry,solvedAlone:firstTry||!SS.explained,explained:SS.explained,fails:SS.fails||[],secs:Math.round((Date.now()-SS.t0)/1000)});
   track('q',{mode:SS.mode,gen:q.gen,topic:q.topic,ok:!!firstTry,ms:Math.min(Date.now()-SS.t0,86400000)});
   if(exam){SS.idx++;return nextQ()}
-  if(firstTry){confetti();sWin()}
+  if(firstTry){if(document.documentElement.dataset.look!='teen')confetti();sWin()}
   const msg=firstTry?(SS.levelUp==3?`🎯 עלית לרמת מבחן ב${GNAME[q.gen]||'סוג השאלה הזה'}!`:ST.streak%5==0&&ST.streak?`🔥 ${ST.streak} ברצף! קיבלת 2 כוכבי בונוס!`:pick(PRAISE).replace(/!$/,'')+(kid()&&Math.random()<.5?`, ${kid()}!`:'!')):(SS.boosted?'עכשיו נתרגל את זה עוד פעמיים, בגרסה קלה יותר. ככה זה ייכנס לראש!':SS.explained?'עכשיו אתה יודע איך! עוד מעט תקבל שאלה דומה, לנסות שוב.':'הצלחת בסוף! ⭐');
   coach(msg,'good');
   const a=view.querySelector('#afterZone');let h='';
@@ -2435,6 +2544,7 @@ function pkPart(it,V,o={}){
     if(ac)p.accept=v=>{const x=+v,lo=pkCalc(pkSub(ac.min,V),V),hi=pkCalc(pkSub(ac.max,V),V);if(isNaN(x)||(ac.integer&&!Number.isInteger(x)))return false;return ac.exclusive?x>lo&&x<hi:x>=lo&&x<=hi};
     return p}
   if(it.type=='fraction')return fracPart(prompt,pkSub(it.answer,V),{...base,mixed:/ /.test(it.answer)});
+  if(BOARD_TYPES.includes(it.type))return boardPart(it,V,base,prompt);
   if(it.type=='spell')return spellPart(prompt,pkSub(it.answer,V),{...base,extraLetters:o.ez?1:2});
   throw new Error('unknown item type '+it.type)}
 function pkQuestion(skill,p={}){
@@ -2481,18 +2591,21 @@ function loadPack(P){
   G.sheetQ=(p={})=>{const sh=SHEETS.find(x=>x.id==p.s),sec=sh.sections[p.sec],r=sec.items[p.i];const sk=Object.values(PK.skills).find(k=>k.pool==r.pool);
     return pkQuestion(sk?sk.id:Object.keys(PK.skills)[0],{item:pkItem(r.pool,r.id)})};
   if(P.cfg)Object.assign(CFG,P.cfg);
+  setLook(P);
   /* progress from older question names carries over (e.g. a hand-coded unit that became a pack) */
   for(const [old,sk] of Object.entries(P.legacy||{})){const g='pk_'+sk;for(const key of ['genStats','lvl','gStreak','srs']){const o=ST[key];if(o&&o[old]!=null&&o[g]==null)o[g]=o[old]}}
   if(ex[0])CFG.origName=ex[0].name;if(ex[1])CFG.variantName=ex[1].name;
 }
 /* validator (used by the build and, later, for AI-made packs): returns a list of problems */
 function validatePack(P){pkNormalize(P);const errs=[];const E=m=>errs.push(m);
-  if(P.schema!='masa-pack/1')E('schema');const pools=P.pools||{};
+  if(P.schema!='masa-pack/1')E('schema');
+  if(P.cfg&&P.cfg.look&&!['kids','teen'].includes(P.cfg.look))E('cfg.look must be kids or teen');const pools=P.pools||{};
   (P.topics||[]).forEach(t=>(t.skills||[]).forEach(s=>{if(!pools[s.pool]||!pools[s.pool].length)E(`skill ${s.id}: empty pool ${s.pool}`)}));
   for(const [pn,items] of Object.entries(pools))items.forEach((it,i)=>{const w=`${pn}[${it.id??i}]`;
     for(let r=0;r<(it.vars?30:1);r++){let V;try{V=pkVars(it.vars)}catch(e){E(w+' vars: '+e.message);break}
       const parts=it.type=='multi'?it.parts:[it];
-      for(const pt of parts){if(!['choice','number','fraction','spell'].includes(pt.type)){E(w+' type '+pt.type);continue}
+      for(const pt of parts){if(!['choice','number','fraction','spell',...BOARD_TYPES].includes(pt.type)){E(w+' type '+pt.type);continue}
+        if(BOARD_TYPES.includes(pt.type)){boardValidate(pt,V,w,E);continue}
         if(pt.answer==null&&!(pt.type=='number'&&pt.accept))E(w+' no answer');
         if(pt.type=='choice'){const vals=(pt.options||[]).map(x=>String(pkSub(typeof x=='string'?x:x.v,V)));const a=String(pkSub(pt.answer,V));
           if(!vals.includes(a))E(`${w}: answer "${a}" not in options`);if(new Set(vals).size!=vals.length)E(w+': duplicate options')}
@@ -2500,6 +2613,150 @@ function validatePack(P){pkNormalize(P);const errs=[];const E=m=>errs.push(m);
         if(pt.type=='spell'&&!/^[A-Za-z]+$/.test(pkSub(pt.answer,V)))E(w+': spell answer must be letters')}}});
   (P.exams||[]).forEach((e,i)=>{(e.fixed||[]).forEach(f=>{if(!(P.topics||[]).some(t=>(t.skills||[]).some(s=>s.id==f.skill)))E(`exam ${i+1}: unknown skill ${f.skill}`)})});
   return errs}
+/* ================= BOARD MECHANICS (subject-independent) =================
+   The child does something with the items; the result is turned into ONE canonical string, so hints, mistakes,
+   step-by-step explanations, levels and exams work exactly as for every other question type.
+   Nothing here knows the subject: the content (text, numbers, words) comes from the pack.
+     sort   items go into groups            { bins:["a","b"], items:[{t:"x",bin:0|"a"}] }
+     match  pair left with right            { pairs:[{l:"x",r:"y"}] }
+     order  put in order (listed correctly) { items:["first","second",…] }
+     tap    tap the right words             { tokens:["The",{t:"cat",ok:true},"runs"] }
+     cells  colour parts of a shape         { shape:"pie|bar", parts:4, wholes:1, count:3 }
+   (synced into math-journey.html by sync_engine.py, together with pack-engine.js)                                  */
+const BOARD_TYPES=['sort','match','order','tap','cells'];
+/* the look (kids/teen) comes from the pack's class: see bdLookOf */
+const BD_SAY={sort:'לחצו על פריט ואז על הקבוצה שלו.',match:'לחצו על פריט בצד אחד ואז על הפריט שמתאים לו.',order:'לחצו על הפריטים לפי הסדר.',tap:'לחצו על המילים הנכונות.',cells:'לחצו על החלקים כדי לצבוע אותם.'};
+const bdMixed=n=>{const idx=[...Array(n).keys()];let d=shuffle(idx.slice());for(let k=0;k<6&&n>1&&d.every((x,i)=>x==i);k++)d=shuffle(idx.slice());return d};
+/* one pack item → one engine part (kind 'board') */
+function boardPart(it,V,base,prompt){
+  const T=x=>pkHtml(x,V),mode=it.type;let d,answer;
+  if(mode=='sort'){const bins=it.bins.map(T);
+    const items=it.items.map(x=>({h:T(x.t),b:typeof x.bin=='number'?x.bin:it.bins.findIndex(b=>String(pkSub(b,V))==String(pkSub(x.bin,V)))}));
+    d={bins,items,disp:bdMixed(items.length)};answer=items.map(x=>x.b).join(',')}
+  else if(mode=='match'){d={L:it.pairs.map(x=>T(x.l)),R:it.pairs.map(x=>T(x.r)),disp:bdMixed(it.pairs.length)};answer=it.pairs.map((_,i)=>i).join(',')}
+  else if(mode=='order'){d={items:it.items.map(T),disp:bdMixed(it.items.length)};answer=it.items.map((_,i)=>i).join(',')}
+  else if(mode=='tap'){const tk=it.tokens.map(x=>typeof x=='string'?{t:x}:x);d={tokens:tk.map(x=>T(x.t)),ok:tk.map(x=>!!x.ok),ltr:!/[֐-׿]/.test(tk.map(x=>x.t).join(''))};answer=tk.map((x,i)=>x.ok?i:-1).filter(i=>i>=0).join(',')}
+  else{const parts=+pkSub(it.parts,V),wholes=+pkSub(it.wholes??1,V),count=+pkSub(it.count,V);d={shape:it.shape||'pie',parts,wholes,count};answer=String(count)}
+  return {...base,kind:'board',mode,prompt,d,answer:String(answer)}}
+function boardState(pt){const d=pt.d;
+  if(pt.mode=='sort')return {place:d.items.map(()=>-1),sel:null};
+  if(pt.mode=='match')return {pair:d.L.map(()=>-1),selL:null,selR:null};
+  if(pt.mode=='order')return {seq:[]};
+  if(pt.mode=='tap')return {on:d.tokens.map(()=>false)};
+  return {on:[...Array(d.parts*d.wholes)].map(()=>false)}}
+function boardHtml(pt){return `<div class="bd bd-${pt.mode}" id="bdZone"></div><div class="actions" style="justify-content:center"><button class="big" id="bdOk">בדיקה ✓</button></div>`}
+function boardInit(pt){SS.bd=boardState(pt);const z=view.querySelector('#bdZone');
+  const act=el=>{const b=el.closest('[data-a]');if(b&&!SS.locked&&!SS.bd.done&&!b.disabled)boardAct(pt,b.dataset.a,+b.dataset.i)};
+  z.addEventListener('click',e=>act(e.target));
+  z.addEventListener('keydown',e=>{if((e.key=='Enter'||e.key==' ')&&e.target.matches('svg [data-a]')){e.preventDefault();act(e.target)}});
+  view.querySelector('#bdOk').onclick=()=>boardCheck(pt);boardRender()}
+function boardAct(pt,a,i){const st=SS.bd;st.flag=null;st.bad=false;const prev=pt.mode=='sort'?bdRects():null;
+  if(a=='chip'){if(st.place[i]>=0){st.place[i]=-1;st.sel=null}else st.sel=st.sel==i?null:i}
+  else if(a=='bin'){if(st.sel!=null){st.place[st.sel]=i;st.sel=null}}
+  else if(a=='L'){if(st.pair[i]>=0){st.pair[i]=-1;st.selL=null}else st.selL=st.selL==i?null:i}
+  else if(a=='R'){const k=st.pair.indexOf(i);if(k>=0){st.pair[k]=-1;st.selR=null}else st.selR=st.selR==i?null:i}
+  else if(a=='pick')st.seq.push(i);
+  else if(a=='slot')st.seq.splice(i,1);
+  else if(a=='tok'||a=='cell')st.on[i]=!st.on[i];
+  if(pt.mode=='match'&&st.selL!=null&&st.selR!=null){st.pair[st.selL]=st.selR;st.selL=st.selR=null}
+  boardRender(prev)}
+/* what the child built, as the same string as pt.answer; null while it is incomplete */
+function boardCanon(pt){const st=SS.bd;
+  if(pt.mode=='sort')return st.place.every(x=>x>=0)?st.place.join(','):null;
+  if(pt.mode=='match')return st.pair.every(x=>x>=0)?st.pair.join(','):null;
+  if(pt.mode=='order')return st.seq.length==pt.d.items.length?st.seq.join(','):null;
+  if(pt.mode=='tap')return st.on.some(Boolean)?st.on.map((x,i)=>x?i:-1).filter(i=>i>=0).join(','):null;
+  return st.on.some(Boolean)?String(st.on.filter(Boolean).length):null}
+function boardCheck(pt){if(SS.locked||SS.bd.done)return;const v=boardCanon(pt);
+  if(v==null){coach({sort:'עוד לא מיינת את כל הפריטים.',match:'עוד לא חיברת את כל הזוגות.',order:'עוד לא סידרת את כל הפריטים.',tap:'עוד לא סימנת אף מילה.',cells:'עוד לא צבעת אף חלק.'}[pt.mode],'hint','think');return}
+  answer(v,null)}
+function boardFlags(pt){const st=SS.bd,d=pt.d,f={};
+  if(pt.mode=='sort')d.items.forEach((x,i)=>f[i]=st.place[i]==x.b?'right':'wrong');
+  if(pt.mode=='match')st.pair.forEach((r,i)=>f[i]=r==i?'right':'wrong');
+  if(pt.mode=='order')st.seq.forEach((x,k)=>f[k]=x==k?'right':'wrong');
+  if(pt.mode=='tap')d.ok.forEach((ok,i)=>{if(st.on[i])f[i]=ok?'right':'wrong';else if(ok)f[i]='miss'});
+  return f}
+/* wrong answer: show what is right and what is not, then take back only the wrong pieces */
+function boardWrong(pt){const st=SS.bd;st.flag=boardFlags(pt);if(pt.mode=='cells')st.bad=true;boardRender();
+  setTimeout(()=>{if(SS.locked||SS.bd!==st||!view.querySelector('#bdZone'))return;const f=st.flag||{};st.flag=null;st.bad=false;
+    if(pt.mode=='sort')pt.d.items.forEach((_,i)=>{if(f[i]=='wrong')st.place[i]=-1});
+    if(pt.mode=='match')st.pair.forEach((_,i)=>{if(f[i]=='wrong')st.pair[i]=-1});
+    if(pt.mode=='order'){const k=st.seq.findIndex((_,i)=>f[i]=='wrong');if(k>=0)st.seq.length=k}
+    if(pt.mode=='tap')st.on.forEach((_,i)=>{if(f[i]=='wrong')st.on[i]=false});
+    if(pt.mode=='cells')st.on=st.on.map(()=>false);
+    st.sel=st.selL=st.selR=null;boardRender()},1100)}
+/* right answer (or after the step-by-step explanation): show the finished board */
+function boardRight(pt){const st=SS.bd,d=pt.d;if(!st)return;st.done=true;st.flag={};st.bad=false;
+  if(pt.mode=='sort'){st.place=d.items.map(x=>x.b);d.items.forEach((_,i)=>st.flag[i]='right')}
+  if(pt.mode=='match'){st.pair=d.L.map((_,i)=>i);d.L.forEach((_,i)=>st.flag[i]='right')}
+  if(pt.mode=='order'){st.seq=d.items.map((_,i)=>i);d.items.forEach((_,i)=>st.flag[i]='right')}
+  if(pt.mode=='tap'){st.on=d.ok.slice();d.ok.forEach((ok,i)=>{if(ok)st.flag[i]='right'})}
+  if(pt.mode=='cells'){st.on=st.on.map((_,i)=>i<d.count);st.good=true}
+  st.sel=st.selL=st.selR=null;boardRender()}
+/* the answer as text (used by the explanation) */
+function boardAns(pt){const d=pt.d;
+  if(pt.mode=='sort')return d.bins.map((b,bi)=>`<b>${b}</b>: ${d.items.filter(x=>x.b==bi).map(x=>x.h).join(', ')}`).join('<br>');
+  if(pt.mode=='match')return d.L.map((l,i)=>`${l} ↔ ${d.R[i]}`).join('<br>');
+  if(pt.mode=='order')return d.items.join(' ← ');
+  if(pt.mode=='tap')return d.tokens.filter((_,i)=>d.ok[i]).join(', ');
+  return `${d.count} מתוך ${d.parts*d.wholes} חלקים`}
+/* look: "kids" (default) or "teen", from the pack's class (subject.grade) or cfg.look. Colour keeps ONE meaning: the colour of a group. */
+function bdLookOf(P){const c=P&&P.cfg&&P.cfg.look;if(c=='kids'||c=='teen')return c;
+  const g=String((P&&P.subject&&P.subject.grade)||'').replace(/[׳'"״\s]/g,'');
+  const n=parseInt(g,10);if(!isNaN(n))return n<=6?'kids':'teen';
+  return ['א','ב','ג','ד','ה','ו'].includes(g)||!g?'kids':'teen'}
+function setLook(P){document.documentElement.dataset.look=bdLookOf(P)}
+/* shapes for 'cells' (pie or bar, one per whole). Kids get a cookie, teens a flat colour. */
+function bdShape(d,on,bad,locked,w0){const W=120,bar=d.shape=='bar';let out='';
+  for(let w=0;w<d.wholes;w++){let s=`<svg class="bd-shape" viewBox="0 0 ${bar?W*1.6:W} ${bar?44:W}" role="group" aria-label="שלם ${w+1} מתוך ${d.wholes}, מחולק ל-${d.parts} חלקים שווים">`;
+    if(w==0)s+=`<defs><radialGradient id="bdck" cx="38%" cy="32%" r="80%"><stop offset="0" stop-color="#f0bd78"/><stop offset=".7" stop-color="#d9984f"/><stop offset="1" stop-color="#b9743a"/></radialGradient>
+      <pattern id="bdchips" width="120" height="120" patternUnits="userSpaceOnUse">${[[30,24,4],[78,18,3.5],[96,50,4],[58,44,3],[22,68,3.5],[70,76,4],[102,92,3.5],[40,100,4],[14,100,3],[150,20,4],[170,30,3.5]].map(([x,y,r])=>`<ellipse cx="${x}" cy="${y}" rx="${r}" ry="${r*.8}" fill="#4a2a1a" transform="rotate(${x*3} ${x} ${y})"/>`).join('')}</pattern></defs>`;
+    for(let k=0;k<d.parts;k++){const i=w*d.parts+k;
+      const attr=`class="bd-cell${on[i]?' on':''}" data-a="cell" data-i="${i}" ${locked?'':'tabindex="0"'} role="button" aria-pressed="${!!on[i]}" aria-label="חלק ${k+1}"`;
+      let geo;
+      if(bar){const cw=W*1.6/d.parts;geo=(extra)=>`<rect ${extra} x="${k*cw+1}" y="2" width="${cw-2}" height="40" rx="4"/>`}
+      else{const a=k*2*Math.PI/d.parts-Math.PI/2,b=(k+1)*2*Math.PI/d.parts-Math.PI/2,r=56,dd=`M60 60 L${(60+r*Math.cos(a)).toFixed(2)} ${(60+r*Math.sin(a)).toFixed(2)} A${r} ${r} 0 0 1 ${(60+r*Math.cos(b)).toFixed(2)} ${(60+r*Math.sin(b)).toFixed(2)} Z`;geo=(extra)=>`<path ${extra} d="${dd}"/>`}
+      s+=`<g ${attr}>${geo('class="base"')}${geo('class="tex" fill="url(#bdchips)"')}</g>`}
+    out+=s+'</svg>'}
+  return out}
+const bdReduce=()=>matchMedia('(prefers-reduced-motion: reduce)').matches;
+const bdRects=()=>{const m={};document.querySelectorAll('#bdZone .bd-chip[data-i]').forEach(c=>m[c.dataset.i]=c.getBoundingClientRect());return m};
+function bdFlip(prev){if(!prev||bdReduce())return;const teen=document.documentElement.dataset.look=='teen';
+  document.querySelectorAll('#bdZone .bd-chip[data-i]').forEach(c=>{const a=prev[c.dataset.i];if(!a)return;const b=c.getBoundingClientRect(),dx=a.left-b.left,dy=a.top-b.top;
+    if(Math.abs(dx)+Math.abs(dy)>2)c.animate([{transform:`translate(${dx}px,${dy}px)`},{transform:'translate(0,0)'}],{duration:teen?180:300,easing:teen?'ease-out':'cubic-bezier(.2,.9,.3,1.2)'})})}
+function boardRender(prev){const pt=SS.q.parts[SS.part],z=view.querySelector('#bdZone');if(!z)return;
+  const st=SS.bd,d=pt.d,f=st.flag||{},lock=st.done?' disabled':'';
+  const chip=(a,i,h,extra='',k)=>`<button class="opt txt bd-chip ${extra} ${f[i]||''}" data-a="${a}" data-i="${i}" data-k="${k==null||k<0?'':k%6}"${lock}>${h}</button>`;
+  let h='';
+  if(pt.mode=='sort')
+    h=`<div class="bd-bins">${d.bins.map((b,bi)=>`<div class="bd-bin" data-k="${bi%6}"><button class="bd-binh" data-a="bin" data-i="${bi}"${lock}>${b}</button><div class="bd-chips">${d.items.map((x,i)=>st.place[i]==bi?chip('chip',i,x.h,'',bi):'').join('')}</div></div>`).join('')}</div>
+      <div class="bd-tray">${d.disp.filter(i=>st.place[i]<0).map(i=>chip('chip',i,d.items[i].h,st.sel==i?'sel':'')).join('')}</div>`;
+  if(pt.mode=='match'){const used=j=>st.pair.indexOf(j);
+    h=`<div class="bd-cols"><div class="bd-col">${d.L.map((x,i)=>chip('L',i,x,st.selL==i?'sel':'',st.pair[i]>=0?i:-1)).join('')}</div>
+      <div class="bd-col">${d.disp.map(j=>chip('R',j,d.R[j],st.selR==j?'sel':'',used(j)>=0?used(j):-1)).join('')}</div></div>`}
+  if(pt.mode=='order')
+    h=`<div class="bd-row">${d.items.map((_,k)=>st.seq[k]!=null?chip('slot',k,d.items[st.seq[k]],'bd-slot'):`<span class="opt txt bd-chip bd-slot bd-empty">${k+1}</span>`).join('')}</div>
+      <div class="bd-tray">${d.disp.filter(i=>!st.seq.includes(i)).map(i=>chip('pick',i,d.items[i])).join('')}</div>`;
+  if(pt.mode=='tap')
+    h=`<div class="bd-row bd-text" dir="${d.ltr?'ltr':'rtl'}">${d.tokens.map((t,i)=>`<button class="bd-tok ${st.on[i]?'on':''} ${f[i]||''}" data-a="tok" data-i="${i}" aria-pressed="${!!st.on[i]}"${lock}>${t}</button>`).join(' ')}</div>`;
+  if(pt.mode=='cells')
+    h=`<div class="bd-row bd-shapes ${st.bad?'bad':''} ${st.good?'good':''}">${bdShape(d,st.on,st.bad,st.done)}</div><div class="flabels" style="text-align:center">${st.on.filter(Boolean).length} חלקים צבועים</div>`;
+  z.innerHTML=h;bdFlip(prev)}
+/* validator part (called from validatePack for every board item, once per random draw of its variables) */
+function boardValidate(pt,V,w,E){const sub=x=>pkSub(x,V);const uniq=a=>new Set(a.map(x=>String(sub(x)))).size==a.length;
+  if(pt.type=='sort'){if(!Array.isArray(pt.bins)||pt.bins.length<2||!Array.isArray(pt.items)||pt.items.length<2)return E(w+': sort needs 2+ bins and 2+ items');
+    if(!uniq(pt.bins))E(w+': duplicate bins');
+    pt.items.forEach(x=>{const b=typeof x.bin=='number'?x.bin:pt.bins.findIndex(y=>String(sub(y))==String(sub(x.bin)));if(!(b>=0&&b<pt.bins.length))E(`${w}: item "${x.t}" has no valid bin`)});
+    if(!uniq(pt.items.map(x=>x.t)))E(w+': duplicate items')}
+  if(pt.type=='match'){if(!Array.isArray(pt.pairs)||pt.pairs.length<2)return E(w+': match needs 2+ pairs');
+    if(!uniq(pt.pairs.map(x=>x.l))||!uniq(pt.pairs.map(x=>x.r)))E(w+': duplicate side in pairs')}
+  if(pt.type=='order'){if(!Array.isArray(pt.items)||pt.items.length<2)return E(w+': order needs 2+ items');if(!uniq(pt.items))E(w+': duplicate items')}
+  if(pt.type=='tap'){if(!Array.isArray(pt.tokens)||pt.tokens.length<2)return E(w+': tap needs tokens');if(!pt.tokens.some(x=>x&&x.ok))E(w+': tap needs at least one {ok:true} token')}
+  if(pt.type=='cells'){const p=+sub(pt.parts),wh=+sub(pt.wholes??1),c=+sub(pt.count);
+    if(!Number.isInteger(p)||p<2||p>12)E(w+': cells parts must be 2..12');
+    if(!Number.isInteger(wh)||wh<1||wh>6)E(w+': cells wholes must be 1..6');
+    if(!Number.isInteger(c)||c<1||c>p*wh)E(w+': cells count must be 1..parts*wholes (got '+sub(pt.count)+')');
+    if(pt.shape&&!['pie','bar'].includes(pt.shape))E(w+': cells shape must be pie or bar')}}
 /*SUBJECT-PACK*/
 startApp();
 </script>

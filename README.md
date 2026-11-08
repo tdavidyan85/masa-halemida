@@ -8,6 +8,9 @@
 - כל מקצוע הוא תיקייה עם עמוד משחק משלו. הכוכבים, הינשוף ושם הילד משותפים לכל המקצועות (נשמרים בדפדפן).
 - כל דחיפה לענף `main` מתפרסמת אוטומטית ב-GitHub Pages.
 
+## יחידה חדשה מדף עבודה (בפיתוח)
+הורה מצלם דף ← חבילה ← עיון ואישור ← הילד משחק בקישור. ראו [docs/architecture-photo-ingest.md](docs/architecture-photo-ingest.md).
+
 ## תוכן כנתונים (חבילות תוכן)
 יחידה במקצוע היא קובץ JSON בתיקייה `packs/` (פורמט `masa-pack/1`), בלי קוד. ראו [docs/pack-format.md](docs/pack-format.md).
 בדיקת חבילה: `node tools/validate-pack.js packs/<file>.json`. האנגלית (שמות גוף) כבר רצה מתוך `packs/english-pronouns.json`.

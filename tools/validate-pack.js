@@ -3,7 +3,9 @@
 const {chromium}=require('playwright');const fs=require('fs');const path=require('path');
 (async()=>{const file=process.argv[2];const pack=JSON.parse(fs.readFileSync(file,'utf8'));
   const b=await chromium.launch();const p=await b.newPage();
-  await p.goto('file://'+path.resolve(__dirname,'../math/index.html'));await p.waitForTimeout(500);
+  // the freshly built engine if there is one (new question types), else the published page
+  const built=path.resolve(__dirname,'../src/deploy/index.min.html');
+  await p.goto('file://'+(fs.existsSync(built)?built:path.resolve(__dirname,'../math/index.html')));await p.waitForTimeout(500);
   const res=await p.evaluate(P=>{const errs=validatePack(JSON.parse(JSON.stringify(P)));if(errs.length)return errs;
     try{loadPack(P)}catch(e){return ['load: '+e.message]}
     const out=[];for(const g of Object.keys(TOPIC_OF))for(let i=0;i<100;i++){try{const q=makeQ(g,i%3?{}:{ez:true});

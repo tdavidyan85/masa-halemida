@@ -46,6 +46,7 @@ function pkPart(it,V,o={}){
     if(ac)p.accept=v=>{const x=+v,lo=pkCalc(pkSub(ac.min,V),V),hi=pkCalc(pkSub(ac.max,V),V);if(isNaN(x)||(ac.integer&&!Number.isInteger(x)))return false;return ac.exclusive?x>lo&&x<hi:x>=lo&&x<=hi};
     return p}
   if(it.type=='fraction')return fracPart(prompt,pkSub(it.answer,V),{...base,mixed:/ /.test(it.answer)});
+  if(BOARD_TYPES.includes(it.type))return boardPart(it,V,base,prompt);
   if(it.type=='spell')return spellPart(prompt,pkSub(it.answer,V),{...base,extraLetters:o.ez?1:2});
   throw new Error('unknown item type '+it.type)}
 function pkQuestion(skill,p={}){
@@ -92,18 +93,21 @@ function loadPack(P){
   G.sheetQ=(p={})=>{const sh=SHEETS.find(x=>x.id==p.s),sec=sh.sections[p.sec],r=sec.items[p.i];const sk=Object.values(PK.skills).find(k=>k.pool==r.pool);
     return pkQuestion(sk?sk.id:Object.keys(PK.skills)[0],{item:pkItem(r.pool,r.id)})};
   if(P.cfg)Object.assign(CFG,P.cfg);
+  setLook(P);
   /* progress from older question names carries over (e.g. a hand-coded unit that became a pack) */
   for(const [old,sk] of Object.entries(P.legacy||{})){const g='pk_'+sk;for(const key of ['genStats','lvl','gStreak','srs']){const o=ST[key];if(o&&o[old]!=null&&o[g]==null)o[g]=o[old]}}
   if(ex[0])CFG.origName=ex[0].name;if(ex[1])CFG.variantName=ex[1].name;
 }
 /* validator (used by the build and, later, for AI-made packs): returns a list of problems */
 function validatePack(P){pkNormalize(P);const errs=[];const E=m=>errs.push(m);
-  if(P.schema!='masa-pack/1')E('schema');const pools=P.pools||{};
+  if(P.schema!='masa-pack/1')E('schema');
+  if(P.cfg&&P.cfg.look&&!['kids','teen'].includes(P.cfg.look))E('cfg.look must be kids or teen');const pools=P.pools||{};
   (P.topics||[]).forEach(t=>(t.skills||[]).forEach(s=>{if(!pools[s.pool]||!pools[s.pool].length)E(`skill ${s.id}: empty pool ${s.pool}`)}));
   for(const [pn,items] of Object.entries(pools))items.forEach((it,i)=>{const w=`${pn}[${it.id??i}]`;
     for(let r=0;r<(it.vars?30:1);r++){let V;try{V=pkVars(it.vars)}catch(e){E(w+' vars: '+e.message);break}
       const parts=it.type=='multi'?it.parts:[it];
-      for(const pt of parts){if(!['choice','number','fraction','spell'].includes(pt.type)){E(w+' type '+pt.type);continue}
+      for(const pt of parts){if(!['choice','number','fraction','spell',...BOARD_TYPES].includes(pt.type)){E(w+' type '+pt.type);continue}
+        if(BOARD_TYPES.includes(pt.type)){boardValidate(pt,V,w,E);continue}
         if(pt.answer==null&&!(pt.type=='number'&&pt.accept))E(w+' no answer');
         if(pt.type=='choice'){const vals=(pt.options||[]).map(x=>String(pkSub(typeof x=='string'?x:x.v,V)));const a=String(pkSub(pt.answer,V));
           if(!vals.includes(a))E(`${w}: answer "${a}" not in options`);if(new Set(vals).size!=vals.length)E(w+': duplicate options')}
