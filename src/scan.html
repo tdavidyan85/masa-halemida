@@ -63,10 +63,12 @@ function home(msg){
   <div class="warn">🔒 <b>צלמו בלי השם של הילד</b> (אפשר לכסות אותו באצבע). התמונה נשלחת לקריאה ולא נשמרת. שמות בתוכן מוחלפים בשמות כלליים.</div>
   ${msg?`<div class="warn err" role="alert">${esc(msg)}</div>`:''}
   <input id="f" type="file" accept="image/*" capture="environment" hidden>
-  <button class="big" id="go">📷 לצלם או לבחור תמונה</button>
+  <label class="note" style="display:flex;gap:10px;align-items:flex-start;margin:12px 0;cursor:pointer"><input type="checkbox" id="ok" style="width:22px;height:22px;flex:0 0 auto"><span>אני מבין/ה שהתמונה נשלחת לשירות בינה מלאכותית חיצוני (Anthropic) כדי לקרוא אותה, ושכיסיתי שמות ופרטים אישיים.</span></label>
+  <button class="big" id="go" disabled style="opacity:.5">📷 לצלם או לבחור תמונה</button>
   ${list.length?`<h2>היחידות שלי</h2>`+list.map(x=>`<div class="card"><div class="row"><div style="flex:1"><b>${esc(x.title||'יחידה')}</b><div class="note">${new Date(x.at).toLocaleDateString('he-IL')}</div></div><button class="w s" data-open="${esc(x.id)}" style="flex:0 0 auto">פתיחה</button></div></div>`).join(''):''}
   <p class="note" style="margin-top:22px"><a href="${BASE}about.html">להורים ולמורים · פרטיות</a></p>`;
-  $('#go').onclick=()=>$('#f').click();$('#f').onchange=e=>e.target.files[0]&&upload(e.target.files[0]);
+  $('#ok').onchange=e=>{const g=$('#go');g.disabled=!e.target.checked;g.style.opacity=e.target.checked?'':'.5'};
+  $('#go').onclick=()=>$('#ok').checked&&$('#f').click();$('#f').onchange=e=>e.target.files[0]&&upload(e.target.files[0]);
   M.querySelectorAll('[data-open]').forEach(b=>b.onclick=()=>openPack(b.dataset.open));
 }
 function waiting(t){M.innerHTML=`<div class="wait" role="status"><div class="owl">🦉</div><h1>${t}</h1><p class="note">זה לוקח כחצי דקה. אפשר להשאיר את המסך פתוח.</p><div class="dots"><span></span><span></span><span></span></div></div>`}
