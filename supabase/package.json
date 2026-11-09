@@ -1,0 +1,13 @@
+{
+  "name": "masa-db",
+  "private": true,
+  "type": "module",
+  "description": "Database migrations and RLS security tests. Tests run on a throwaway local PostgreSQL – never on a cloud project.",
+  "scripts": {
+    "test": "node --test --test-concurrency=1 tests/*.test.mjs"
+  },
+  "devDependencies": {
+    "embedded-postgres": "^17.11.0-beta.19",
+    "pg": "^8.23.1"
+  }
+}
