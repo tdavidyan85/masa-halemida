@@ -1,6 +1,6 @@
 // Edge Function `student-login` (Deno). Thin wrapper: all rules are in ../_shared/studentLogin.ts and in the database.
-// NOT deployed and NOT yet run against a real Supabase. Must be verified on a local Supabase (`supabase start`)
-// before any production use – in particular the generateLink + verifyOtp step below.
+// NOT deployed. Verified end-to-end on a LOCAL Supabase (tests/e2e.test.mjs), including the generateLink +
+// verifyOtp step below; not yet on a cloud project.
 //
 // Environment (set by Supabase for Edge Functions): SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY.
 // Ours: ALLOWED_ORIGINS (comma list), IP_HASH_SALT (any random string; makes stored address hashes useless elsewhere).

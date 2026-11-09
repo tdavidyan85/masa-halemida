@@ -2,7 +2,7 @@
 //   POST { action:'create', fullName, birthDate, grade, relation, loginMode, pin | username+password }
 //   POST { action:'set_secret', studentId, kind:'pin'|'password', secret }
 // The caller must send their own session (Authorization: Bearer <access token>); verify_jwt stays ON.
-// NOT deployed and NOT yet run against a real Supabase.
+// NOT deployed. Verified end-to-end on a LOCAL Supabase (tests/e2e.test.mjs); not yet on a cloud project.
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { createStudent, setStudentSecret } from '../_shared/manageStudent.ts'
 import { corsHeaders, errorResponse, json } from '../_shared/http.ts'

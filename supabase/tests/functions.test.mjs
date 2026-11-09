@@ -147,7 +147,7 @@ describe('against the local database', () => {
         createUser: async (email, _pw, fullName) => {
           authLog.push(['createUser', email])
           await s.asOwner()
-          return (await s.rows(`insert into auth.users (email, email_confirmed_at, raw_user_meta_data) values ($1, now(), $2) returning id`, [email, { full_name: fullName }]))[0].id
+          return (await s.rows(`insert into auth.users (id, email, email_confirmed_at, raw_user_meta_data) values (gen_random_uuid(), $1, now(), $2) returning id`, [email, { full_name: fullName }]))[0].id   // Auth assigns the id
         },
         deleteUser: async id => { authLog.push(['deleteUser', id]); await s.asOwner(); await s.rows('delete from auth.users where id = $1', [id]) },
       },

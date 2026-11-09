@@ -1,6 +1,6 @@
 // Real data source on Supabase (supabase-js v2). Built from a validated config only (see config.ts).
-// NOT yet run against a real Supabase project – verified so far with a fake client in unit tests, and
-// the database rules it relies on are verified separately (supabase/tests). Treat as development code.
+// Verified against a real LOCAL Supabase (browser run: parent sign-in, child account, device approval, PIN
+// sign-in) and with a fake client in unit tests. Not yet against a cloud project – development code.
 //
 // Rules this file follows:
 //  * Sessions come from Supabase Auth only: adults via signInWithPassword / signUp; students via the

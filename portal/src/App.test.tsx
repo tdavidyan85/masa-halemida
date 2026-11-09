@@ -177,6 +177,13 @@ describe('screens', () => {
     expect(screen.getByRole('heading', { name: 'מבחן קצר: מספרים גדולים' })).toBeInTheDocument()
   })
 
+  it('student with no tasks at all is NOT told "all tasks completed" (found in the local Supabase run)', async () => {
+    const source = new MockSource({ delayMs: 0 })
+    source.myTasks = async () => []
+    render(<Providers source={source} session={sessionFor('s-noam')}><MemoryRouter initialEntries={['/student']}><AppRoutes /></MemoryRouter></Providers>)
+    expect(await screen.findByRole('heading', { name: 'אין לך משימות כרגע' })).toBeInTheDocument()
+    expect(screen.queryByText('כל המשימות הושלמו!')).not.toBeInTheDocument()
+  })
   it('profile pictures are labeled as samples', async () => {
     renderAt('/teacher/students', sessionFor('u-t1'))
     await screen.findByText('ליאור כץ')

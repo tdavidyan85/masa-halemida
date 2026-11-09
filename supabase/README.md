@@ -7,7 +7,7 @@
 ```bash
 cd supabase
 npm install
-npm test        # מרים PostgreSQL 17 זמני (embedded-postgres), מחיל הכול, מריץ 75 בדיקות ומוחק
+npm test        # מרים PostgreSQL 17 זמני (embedded-postgres), מחיל הכול, מריץ 76 בדיקות ומוחק (בדיקות e2e מדולגות)
 ```
 
 אין צורך ב-Docker או ב-Supabase CLI. הבדיקות רצות על שרת PostgreSQL אמיתי, אבל **לא על Supabase עצמו**:
@@ -34,6 +34,7 @@ npm test        # מרים PostgreSQL 17 זמני (embedded-postgres), מחיל 
 | `…120800_avatars_storage` | דלי `avatars` פרטי ומדיניות לתמונות פרופיל (בלי תמונות) |
 | `…130000_student_auth` | הורה מאומת, `student_devices`, `login_attempts`, `enroll_device`/`revoke_device`/`release_student_lock`, פונקציות `srv_*` לשרת בלבד |
 | `…130100_invited_group_visibility` | הורה מוזמן רואה את הקבוצה שאליה הוזמן, אבל לא את התלמידים שבה |
+| `…140000_lock_student_auth_identity` | פרטי ההתחברות של תלמיד (סיסמה, דוא״ל, טלפון) קפואים ב-`auth.users` |
 
 ## התחברות תלמידים וחשבונות ילדים (`functions/`)
 
@@ -51,18 +52,55 @@ npm test        # מרים PostgreSQL 17 זמני (embedded-postgres), מחיל 
 4. מאמתת את ה-hash.
 5. רק אחרי כל זה מבקשת מ-Supabase Auth session רגיל, דרך `auth.admin.generateLink` ואז `auth.verifyOtp`.
 
-| נבדק | לא נבדק עדיין (דורש Supabase אמיתי, `supabase start`) |
-|---|---|
-| כל הלוגיקה והמגבלות: 30 בדיקות, חלקן מול ה-PostgreSQL המקומי עם פונקציות ה-SQL האמיתיות | השלב `generateLink` + `verifyOtp` עצמו |
-| | `verify_jwt` |
-| | CORS |
-| | משתני הסביבה |
-| | זמני הריצה של PBKDF2 בתוך Edge Functions |
-| | אימות הטלפון (דורש ספק SMS) |
+**נבדק מול Supabase מקומי אמיתי** (11.2026: CLI 3.1.0, Auth v2.197.0, Postgres 17.11, Edge Runtime): כל הזרימה עובדת מקצה לקצה.
+- **session אמיתי:** Supabase Auth מנפיק session לילד דרך `generateLink` ו-`verifyOtp`. ה-`sub` נכון, ה-refresh עובד, וה-RLS חל עליו.
+- **אין דואר:** לא נשלח שום דוא״ל לכתובת של הילד.
 
-**חלופות, אם `generateLink` + `verifyOtp` לא יתאים בבדיקה:**
+**חלופות, אם יום אחד `generateLink` + `verifyOtp` לא יתאים:**
 - כניסה עם סיסמה אמיתית של Supabase לתלמידים הבוגרים, שאז עוקפת את הנעילה שלנו.
 - ספק זהות חיצוני דרך Third-party Auth של Supabase.
+
+## Supabase מקומי אמיתי (בלי Docker)
+
+במחשב עם 8GB זיכרון אין מקום ל-Docker: Supabase דורש לפחות 7GB לסביבת הקונטיינרים. במקום זה משתמשים ב-**runtime המקומי של ה-CLI** (ניסיוני; macOS 14 ומעלה על Apple silicon, או Linux).
+- **צריכה בפועל:** כ-460MB זיכרון ו-1.8GB דיסק ב-`~/.supabase`.
+- **CLI:** מותקן כתלות פיתוח (`npx supabase`), בלי התקנה במערכת ובלי הרשאות מנהל.
+
+```bash
+cd supabase
+npm install
+npm run local:start     # מעלה את Supabase ומחיל את המיגרציות. דואר מקומי נשמר ב-Mailpit ולא יוצא החוצה
+npm run test:local      # RLS + לוגיקת הפונקציות + end-to-end, מול השרת המקומי (99 בדיקות)
+npm run local:stop
+```
+
+**`tests/e2e.test.mjs`** בודק:
+- הרשמה עם אימות דוא״ל ושחזור סיסמה, דרך PKCE ו-Mailpit
+- אימות טלפון במצב בדיקות (מספרים פיקטיביים עם קוד קבוע, בלי SMS)
+- יצירת ילד, אישור מכשיר וכניסה ב-PIN
+- נעילה ושחרור, החלפת PIN וביטול מכשיר
+- CORS
+- הזמנה, הסכמה וביטול הסכמה
+- Storage
+
+בלי שרת מקומי הבדיקות האלה **מדולגות** ולא מסומנות כ-"עברו".
+
+### מה נמצא בבדיקות מול Supabase האמיתי ותוקן
+
+1. **ילד יכול היה לקבוע לעצמו סיסמה ב-Auth.** עם ה-session שלו, `updateUser({password})` הצליח. משם אפשר להיכנס ישירות, בלי PIN, בלי מכשיר מאושר ובלי מגבלת ניסיונות. אותו דבר עם שינוי דוא״ל וטלפון.
+   **התיקון:** המיגרציה `…140000` מקפיאה את פרטי ההתחברות של חשבון תלמיד (סיסמה, דוא״ל, טלפון) ברמת מסד הנתונים.
+2. **"הורה מאומת" בלי אימות.** כש-`auth.sms.enable_confirmations` כבוי, Supabase Auth מאשר טלפון חדש **בלי קוד**.
+   **התיקון:** ההגדרה נדלקה ב-`config.toml`, ונוספה בדיקת רגרסיה.
+
+### חובה בכל פרויקט ענן (לבדוק בהגדרות Auth לפני שמחברים)
+
+| הגדרה | ערך | למה |
+|---|---|---|
+| Confirm email | פעיל | הורה ומורה מאמתים דוא״ל |
+| Phone: Enable phone confirmations | **פעיל** (עם ספק SMS אמיתי) | אחרת "הורה מאומת" לא מאומת. בלי טלפון אין הורה מאומת, וגם אין יצירת ילד |
+| Site URL / Redirect URLs | רק הדומיין של הפורטל | קישורי אימות ושחזור |
+| Edge Function `student-login` | `verify_jwt = false` | לתלמיד עוד אין session. הפונקציה אוכפת את המגבלות בעצמה |
+| Edge secrets | `ALLOWED_ORIGINS`, `IP_HASH_SALT` | CORS, וה-hash של הכתובות |
 
 ## כללים שחשוב לדעת כשמחברים את הפורטל
 

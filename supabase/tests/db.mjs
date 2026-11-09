@@ -10,7 +10,29 @@ import { fileURLToPath } from 'node:url'
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const PASSWORD = 'local-test-only'          // throwaway local server, deleted after the run
 
+/**
+ * TEST_DB_URL set → use an already running LOCAL Supabase (e.g. `supabase start`): its real auth/storage, and
+ * the migrations it applied itself. Only 127.0.0.1/localhost is accepted – never a cloud database.
+ * Fixtures are loaded at the start and exactly those rows are removed at the end.
+ */
+async function externalDb(url) {
+  const u = new URL(url)
+  if (!['127.0.0.1', 'localhost'].includes(u.hostname)) throw new Error(`TEST_DB_URL must point to this machine, not ${u.hostname}`)
+  const client = new pg.Client({ connectionString: url })
+  await client.connect()
+  const fail = async msg => { await client.end().catch(() => {}); process.exitCode = 1; throw new Error(msg) }
+  const applied = (await client.query(`select to_regprocedure('public.srv_login_record(uuid, text, boolean, text)') is not null as ok`)).rows[0].ok
+  if (!applied) await fail('the migrations are not applied on TEST_DB_URL (run supabase start / db reset first)')
+  const cleanup = readFileSync(join(ROOT, 'tests/fixtures_cleanup.sql'), 'utf8')
+  await client.query(cleanup)
+  try { await client.query(readFileSync(join(ROOT, 'tests/fixtures.sql'), 'utf8')) }
+  catch (e) { await client.query(cleanup).catch(() => {}); await fail(`failed loading fixtures: ${e.message}`) }
+  const stop = async () => { await client.query(cleanup).catch(() => {}); await client.end().catch(() => {}) }
+  return { client, stop, applied: [`(local Supabase ${u.host})`, 'tests/fixtures.sql'], external: true }
+}
+
 export async function startDb() {
+  if (process.env.TEST_DB_URL) return externalDb(process.env.TEST_DB_URL)
   const dir = mkdtempSync(join(tmpdir(), 'masa-pg-'))
   const port = 55000 + Math.floor(Math.random() * 5000)
   const server = new EmbeddedPostgres({ databaseDir: dir, port, user: 'postgres', password: PASSWORD, persistent: false, onLog: () => {} })

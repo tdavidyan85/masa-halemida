@@ -20,7 +20,7 @@ npm run dev          # http://localhost:5173
 | `npm run build` | בדיקת טיפוסים ובנייה ל-`dist/` |
 | `npm run preview` | מגיש את `dist/` מקומית |
 
-## מצב שרת (פיתוח בלבד, עוד לא נבדק מול Supabase אמיתי)
+## מצב שרת (פיתוח בלבד: נבדק מול Supabase מקומי, לא מול ענן)
 
 ברירת המחדל היא הדגמה. חיבור לשרת נפתח **רק** עם הגדרות מלאות ותקינות ב-`.env.local` (ראו `.env.example`):
 `VITE_DATA_SOURCE=supabase`, `VITE_SUPABASE_ENV=local|dev`, כתובת ומפתח **ציבורי**.

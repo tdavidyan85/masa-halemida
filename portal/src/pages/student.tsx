@@ -50,9 +50,10 @@ export function StudentHome() {
         </div>
         <SpeakButton text={`היי ${first}! מה לומדים היום?`} label="לשמוע" />
       </section>
-      <AsyncView state={st} isEmpty={l => l.every(t => t.progress?.state === 'done')}
-        empty={<EmptyState emoji="🎉" title="כל המשימות הושלמו!" message="כל הכבוד. אפשר לנוח או לתרגל שוב." />}>
-        {tasks => (
+      <AsyncView state={st} isEmpty={l => l.length === 0} empty={<EmptyState emoji="🎈" title="אין לך משימות כרגע" message="כשהמורה תשייך משימה, היא תופיע כאן." />}>
+        {tasks => tasks.every(t => t.progress?.state === 'done')
+          ? <EmptyState emoji="🎉" title="כל המשימות הושלמו!" message="כל הכבוד. אפשר לנוח או לתרגל שוב." />
+          : (
           <div className="task-grid">{tasks.filter(t => t.progress?.state !== 'done').sort((a, b) => a.dueAt.localeCompare(b.dueAt)).slice(0, 3).map(t => <TaskCard key={t.id} t={t} />)}</div>
         )}
       </AsyncView>

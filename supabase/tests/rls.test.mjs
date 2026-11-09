@@ -77,6 +77,14 @@ describe('privilege escalation', () => {
     assert.equal((await s.rows(`select id from public.students`)).length, 0)
     assert.equal((await s.rows(`select * from public.groups`)).length, 0)
   }))
+  it('a student\'s sign-in identity (password, e-mail, phone) can never change – whoever asks', t(async s => {
+    await s.asOwner()      // the role Supabase Auth itself uses to write auth.users
+    for (const [col, val] of [['encrypted_password', 'x'], ['email', 'kid@evil.example'], ['email_change', 'kid@evil.example'], ['phone', '972500000999'], ['phone_change', '972500000999']]) {
+      assert.match((await s.fails(`update auth.users set ${col} = $2 where id = $1`, [U.S1, val])).message, /cannot be changed/, col)
+    }
+    await s.rows(`update auth.users set raw_user_meta_data = '{"x":1}' where id = $1`, [U.S1])          // other fields: fine
+    await s.rows(`update auth.users set encrypted_password = 'new' where id = $1`, [U.P1])              // adults: fine
+  }))
   it('the PIN/lockout table is closed to everyone, admins included', t(async s => {
     for (const who of [U.A, U.P1, U.S1]) {
       await s.as(who)

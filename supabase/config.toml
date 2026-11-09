@@ -1,20 +1,37 @@
-# Supabase CLI configuration for LOCAL development (`supabase start`). Not used by any cloud project.
-# Keys not listed here use the CLI defaults. Verify with the installed CLI version before relying on it.
+# Supabase CLI configuration for LOCAL development only (`supabase start`). Not used by any cloud project.
+# Keys not listed here use the CLI defaults (CLI 3.1.0, installed as a dev dependency: `npx supabase`).
 project_id = "masa-halemida-dev"
+
+# Run without Docker: the CLI's native runtime (experimental; macOS 14+ on Apple silicon, Linux).
+# Start with:  SUPABASE_EXPERIMENTAL_STACK=1 npx supabase start --experimental
+[experimental]
+stack = true
 
 [auth]
 site_url = "http://localhost:5173"
-additional_redirect_urls = ["http://localhost:5173", "http://127.0.0.1:5173"]
+additional_redirect_urls = ["http://localhost:5173", "http://localhost:5173/", "http://127.0.0.1:5173", "http://127.0.0.1:5173/"]
 minimum_password_length = 8
 enable_signup = true
 
 [auth.email]
-enable_signup = true
-enable_confirmations = true          # adults must confirm their e-mail
+enabled = true
+enable_confirmations = true          # adults must confirm their e-mail (local mail goes to Mailpit, never out)
 double_confirm_changes = true
 
 [auth.sms]
-enable_signup = false                 # phone is only for verifying parents (OTP), not for signing up
+enabled = false                       # phone is only for verifying parents (OTP), never for signing up
+# REQUIRED: without this, Supabase Auth marks a new phone as confirmed with NO code (found in the local e2e
+# tests) – and a "verified parent" would be verified by nothing. Must also be ON in every cloud project.
+enable_confirmations = true
+
+# Local tests only: these FICTIONAL numbers get a fixed code and no SMS is ever sent.
+[auth.sms.test_otp]
+972500000901 = "246810"
+972500000902 = "246810"
+
+[auth.rate_limit]
+email_sent = 60                       # local tests send several confirmation/reset mails (default: 2 per hour)
+sms_sent = 60
 
 [functions.student-login]
 verify_jwt = false                    # students have no session yet; the function enforces its own limits
