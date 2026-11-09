@@ -238,6 +238,16 @@ describe('invitations and verified consent', () => {
     await s.as(U.T1)
     assert.match((await s.fails(`select contact_hash from public.invitations`)).message, /permission denied/)
   }))
+  it('the invited parent sees the group they are invited to – but not its students – and only while pending', t(async s => {
+    await s.as(U.P2)
+    assert.deepEqual((await s.rows(`select id from public.groups order by id`)).map(r => r.id), [U.G1, U.G2])   // g2: own child; g1: invited
+    assert.equal((await s.rows(`select * from public.group_members where group_id = $1`, [U.G1])).length, 0)
+    assert.equal((await s.rows(`select id from public.profiles where id = $1`, [U.S1])).length, 0)
+    await s.rows(`select public.respond_invitation($1, false)`, [U.INV_P2])
+    assert.deepEqual((await s.rows(`select id from public.groups`)).map(r => r.id), [U.G2])
+    await s.as(U.P1)
+    assert.deepEqual((await s.rows(`select id from public.groups`)).map(r => r.id), [U.G1])   // own child only, no invitation
+  }))
   it('a parent cannot answer an invitation sent to someone else', t(async s => {
     await s.as(U.P1)
     assert.match((await s.fails(`select public.respond_invitation($1, true, $2)`, [U.INV_P2, U.S1])).message, /not found/)

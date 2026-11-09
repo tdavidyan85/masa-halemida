@@ -1,5 +1,7 @@
 // Screens and navigation, rendered with the mock data source (no delay) and an in-memory router.
-import { render, screen, within } from '@testing-library/react'
+import { act, render, screen, within } from '@testing-library/react'
+import { SupabaseSource } from './data/supabaseSource'
+import { fakeSupabase } from './test/fakeSupabase'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
 import { AppRoutes, Providers } from './App'
@@ -194,5 +196,69 @@ describe('screens', () => {
     renderAt('/admin', sessionFor('u-admin'), { delayMs: 50 })
     expect(screen.getByRole('status')).toHaveTextContent('טוען')
     expect(await screen.findByText('קבוצות פעילות')).toBeInTheDocument()
+  })
+})
+
+describe('account pages', () => {
+  it('the sign-in page links to sign-up and password reset', async () => {
+    const { user } = renderAt('/login')
+    await user.click(screen.getByRole('link', { name: /הרשמה/ }))
+    expect(screen.getByRole('heading', { name: 'הרשמה' })).toBeInTheDocument()
+  })
+  it('in the demo, sign-up explains that no accounts are created', async () => {
+    const { user } = renderAt('/signup')
+    await user.type(screen.getByLabelText('שם מלא'), 'דנה כהן')
+    await user.type(screen.getByLabelText('דוא״ל'), 'dana@example.org')
+    await user.type(screen.getByLabelText(/סיסמה/), 'long-password')
+    await user.click(screen.getByRole('button', { name: 'הרשמה' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('בהדגמה לא נוצרים חשבונות')
+  })
+  it('sign-up validates before sending anything', async () => {
+    const { user } = renderAt('/signup')
+    await user.click(screen.getByRole('button', { name: 'הרשמה' }))
+    expect(screen.getByRole('alert')).toHaveTextContent('צריך שם מלא')
+  })
+  it('in the demo, password reset points to the demo password', async () => {
+    const { user } = renderAt('/forgot-password')
+    await user.type(screen.getByLabelText('דוא״ל'), 'ronit@demo.local')
+    await user.click(screen.getByRole('button', { name: 'שליחת קישור' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('demo1234')
+  })
+  it('opening the reset page without a valid link says so', () => {
+    renderAt('/reset-password')
+    expect(screen.getByRole('alert')).toHaveTextContent('הקישור לא תקף')
+  })
+  it('a parent adding a child in the demo is told it needs the server', async () => {
+    const { user } = renderAt('/parent', sessionFor('u-p1'))
+    await user.click(await screen.findByRole('button', { name: '+ ילד/ה' }))
+    await user.type(screen.getByLabelText('שם מלא'), 'ילד חדש')
+    await user.type(screen.getByLabelText('תאריך לידה'), '2019-04-04')
+    await user.type(screen.getByLabelText('קוד של 6 ספרות'), '480317')
+    await user.click(screen.getByRole('button', { name: 'יצירת החשבון' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('בהדגמה לא יוצרים חשבונות ילדים')
+  })
+})
+
+describe('server mode (fake Supabase client)', () => {
+  function renderServer(path: string) {
+    const f = fakeSupabase({ tables: { profiles: [{ id: 'u1', full_name: 'הורה בדיקה', avatar_path: null, status: 'active' }], user_roles: [{ user_id: 'u1', role: 'parent', status: 'active' }] } })
+    const source = new SupabaseSource(f.client, 'http://localhost/')
+    render(<Providers source={source}><MemoryRouter initialEntries={[path]}><AppRoutes /></MemoryRouter></Providers>)
+    return { ...f, user: userEvent.setup() }
+  }
+  it('says clearly that it is a development server, and hides the demo accounts', async () => {
+    renderServer('/login')
+    expect(screen.getByRole('note')).toHaveTextContent('שרת פיתוח')
+    expect(screen.queryByText('חשבונות לדוגמה')).not.toBeInTheDocument()
+  })
+  it('a protected page waits for the stored session, then asks to sign in', async () => {
+    renderServer('/parent')
+    expect(await screen.findByRole('heading', { name: 'כניסה למבוגרים' })).toBeInTheDocument()
+  })
+  it('a password-reset link leads straight to choosing a new password', async () => {
+    const f = renderServer('/login')
+    act(() => f.emit('PASSWORD_RECOVERY', { id: 'u1' }))
+    expect(await screen.findByRole('heading', { name: 'בחירת סיסמה חדשה' })).toBeInTheDocument()
+    expect(await screen.findByLabelText('סיסמה חדשה')).toBeInTheDocument()
   })
 })

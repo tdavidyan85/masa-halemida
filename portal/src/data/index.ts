@@ -1,13 +1,16 @@
 import { createContext, useContext } from 'react'
 import { MockSource } from './mockSource'
 import { createSupabaseSource } from './supabaseSource'
+import { readConfig } from './config'
 import type { DataSource } from './source'
 
-/** VITE_DATA_SOURCE=mock (default). "supabase" is reserved for later and is not connected yet. */
+/**
+ * Demo (default): local fictional data, nothing leaves the browser.
+ * Server: only with complete, valid settings (see config.ts) – otherwise a ConfigError stops the app.
+ */
 export function createDataSource(env: Record<string, string | undefined> = import.meta.env): DataSource {
-  if (env.VITE_DATA_SOURCE === 'supabase') {
-    return createSupabaseSource({ url: env.VITE_SUPABASE_URL ?? '', anonKey: env.VITE_SUPABASE_ANON_KEY ?? '' })
-  }
+  const cfg = readConfig(env)
+  if (cfg.mode === 'server') return createSupabaseSource(cfg)
   return new MockSource({ delayMs: Number(env.VITE_MOCK_DELAY_MS ?? 350) })
 }
 

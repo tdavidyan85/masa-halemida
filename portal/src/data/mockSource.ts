@@ -2,11 +2,14 @@
 // so the screens behave like the real thing – but it runs in the browser and protects nothing.
 import * as D from './mockData'
 import { AttemptLimiter } from '../auth/attemptLimiter'
-import { ForbiddenError, LoginError } from './source'
-import type { ChildOverview, DataSource, GroupDetail, PinProfile, StudentTask } from './source'
+import { DemoOnlyError, ForbiddenError, LoginError } from './source'
+import type { ChildOverview, DataSource, GroupDetail, NewChildInput, PinProfile, SessionEvent, SignUpInput, StudentTask } from './source'
 import type { Adult, Group, Invitation, Role, Session, Student } from './types'
 
 export interface MockOptions { delayMs?: number; failWith?: string }
+
+/** the demo session lives in this browser tab only (sessionStorage) and holds only fictional people */
+const SESSION_KEY = 'masa-portal-demo-session'
 
 const clone = <T,>(x: T): T => structuredClone(x)
 
@@ -23,8 +26,28 @@ export class MockSource implements DataSource {
   private progress = clone(D.ASSIGNMENT_PROGRESS)
   private subjects = clone(D.SUBJECT_PROGRESS)
   readonly limiter = new AttemptLimiter()
+  private listeners = new Set<(s: Session | null, e: SessionEvent) => void>()
 
   constructor(private opts: MockOptions = {}) {}
+
+  // ---------- session (demo) ----------
+  private remember(s: Session | null, e: SessionEvent) {
+    try { if (s) sessionStorage.setItem(SESSION_KEY, JSON.stringify(s)); else sessionStorage.removeItem(SESSION_KEY) } catch { /* private mode */ }
+    this.listeners.forEach(l => l(s, e))
+    return s
+  }
+  async currentSession(): Promise<Session | null> {
+    try { const v = sessionStorage.getItem(SESSION_KEY); return v ? JSON.parse(v) as Session : null } catch { return null }
+  }
+  onSessionChange(cb: (s: Session | null, e: SessionEvent) => void) { this.listeners.add(cb); return () => { this.listeners.delete(cb) } }
+  async signOut() { this.remember(null, 'signed_out') }
+
+  // ---------- server-only actions ----------
+  async signUpAdult(_input: SignUpInput): Promise<{ needsEmailConfirmation: boolean }> { throw new DemoOnlyError('בהדגמה לא נוצרים חשבונות. אפשר להיכנס עם החשבונות לדוגמה.') }
+  async requestPasswordReset(_email: string): Promise<void> { throw new DemoOnlyError('בהדגמה אין שחזור סיסמה. הסיסמה לכל החשבונות לדוגמה היא demo1234.') }
+  async updatePassword(_pw: string): Promise<void> { throw new DemoOnlyError() }
+  async createChild(s: Session, _input: NewChildInput): Promise<{ studentId: string }> { this.need(s, 'parent'); throw new DemoOnlyError('בהדגמה לא יוצרים חשבונות ילדים.') }
+  async enrollThisDevice(s: Session, _studentId: string): Promise<void> { this.need(s, 'parent'); throw new DemoOnlyError('בהדגמה כל המכשירים "מאושרים".') }
 
   private async wait<T>(value: T): Promise<T> {
     if (this.opts.delayMs) await new Promise(r => setTimeout(r, this.opts.delayMs))
@@ -47,7 +70,7 @@ export class MockSource implements DataSource {
     if (!u || password !== D.DEMO_PASSWORD) throw new LoginError('הדוא״ל או הסיסמה לא נכונים')
     if (u.status === 'pending') throw new LoginError('החשבון ממתין לאישור מנהל המערכת')
     if (u.status === 'suspended') throw new LoginError('החשבון מושעה. פנו למנהל המערכת')
-    return this.wait(this.session(u))
+    return this.remember(await this.wait(this.session(u)), 'signed_in')!
   }
   async pinProfiles(): Promise<PinProfile[]> {
     return this.wait(this.students.filter(x => x.loginMode === 'pin')
@@ -63,7 +86,7 @@ export class MockSource implements DataSource {
       throw new LoginError(r.ok ? 'הקוד לא נכון. נסו שוב' : r.reason === 'needs_parent' ? 'החשבון נעול. צריך שהורה ישחרר אותו' : 'יותר מדי ניסיונות. נסו שוב בעוד רבע שעה', r)
     }
     this.limiter.succeed(key)
-    return this.wait(this.session(st))
+    return this.remember(await this.wait(this.session(st)), 'signed_in')!
   }
   async signInPassword(username: string, password: string) {
     const key = 'pw:' + username.trim().toLowerCase()
@@ -75,7 +98,7 @@ export class MockSource implements DataSource {
       throw new LoginError(r.ok ? 'שם המשתמש או הסיסמה לא נכונים' : 'יותר מדי ניסיונות. נסו שוב מאוחר יותר', r)
     }
     this.limiter.succeed(key)
-    return this.wait(this.session(st))
+    return this.remember(await this.wait(this.session(st)), 'signed_in')!
   }
 
   // ---------- admin ----------

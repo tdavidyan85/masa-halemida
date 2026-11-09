@@ -190,3 +190,11 @@ input:focus, select:focus { border-color: var(--primary); outline: none; }
   .pinpad { grid-template-columns: repeat(3, 68px); } .pinpad button { height: 68px; }
 }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+
+/* ===== account pages ===== */
+.dev-banner { background: #e2ecff; border-bottom-color: #9db8f0; color: #1d3f86; }
+.form-note { color: var(--info); background: var(--info-bg); border-radius: 12px; padding: 8px 12px; font-weight: 600; }
+.radio-row { border: 0; padding: 0; margin: 0 0 14px; display: flex; flex-wrap: wrap; gap: 8px 18px; }
+.radio-row legend { font-weight: 600; margin-bottom: 6px; }
+.radio-row input { min-height: auto; width: 20px; height: 20px; }
+.auth-links { justify-content: center; margin-top: 14px; }

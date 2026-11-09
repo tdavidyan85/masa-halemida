@@ -54,7 +54,8 @@ export default function AdultLogin() {
           {error && <p className="form-error" role="alert">{error}</p>}
           <button className="btn btn-primary btn-block" disabled={busy}>{busy ? 'נכנסים…' : 'כניסה'}</button>
         </form>
-        <div className="demo-box">
+        <p className="row wrap small auth-links"><Link to="/forgot-password">שכחתי סיסמה</Link><span aria-hidden>·</span><Link to="/signup">אין לי חשבון: הרשמה</Link></p>
+        {data.kind === 'mock' && <div className="demo-box">
           <b>חשבונות לדוגמה</b> (סיסמה: <code dir="ltr">{DEMO_PASSWORD}</code>)
           <div className="sample-grid">
             {SAMPLES.map(s => (
@@ -63,7 +64,7 @@ export default function AdultLogin() {
               </button>
             ))}
           </div>
-        </div>
+        </div>}
       </main>
     </div>
   )

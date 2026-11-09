@@ -13,6 +13,30 @@ export class LoginError extends Error {
   constructor(message: string, public readonly detail?: CheckResult) { super(message); this.name = 'LoginError' }
 }
 
+/** an action that exists only with a real server (sign-up, password reset, creating a child…) */
+export class DemoOnlyError extends Error {
+  constructor(message = 'הפעולה הזאת לא זמינה במצב הדגמה. היא תעבוד כשהפורטל יחובר לשרת.') { super(message); this.name = 'DemoOnlyError' }
+}
+/** anything else that went wrong on the server, in words a user can read */
+export class ServerError extends Error {
+  constructor(message = 'משהו השתבש בשרת. נסו שוב בעוד רגע') { super(message); this.name = 'ServerError' }
+}
+
+export type SessionEvent = 'signed_in' | 'signed_out' | 'password_recovery' | 'updated'
+
+export interface SignUpInput { fullName: string; email: string; password: string; role: 'parent' | 'teacher' }
+
+export interface NewChildInput {
+  fullName: string
+  birthDate: string                 // YYYY-MM-DD
+  grade: import('./types').Grade
+  relation: 'אמא' | 'אבא' | 'אפוטרופוס/ית'
+  loginMode: 'pin' | 'password'
+  pin?: string
+  username?: string
+  password?: string
+}
+
 export interface PinProfile { id: string; firstName: string; avatar: string }
 
 export interface GroupDetail {
@@ -42,6 +66,18 @@ export interface DataSource {
   pinProfiles(): Promise<PinProfile[]>
   signInPin(studentId: string, pin: string): Promise<Session>
   signInPassword(username: string, password: string): Promise<Session>
+  // session lifecycle (demo: a fictional session in this tab; server: Supabase Auth)
+  currentSession(): Promise<Session | null>
+  onSessionChange(cb: (s: Session | null, event: SessionEvent) => void): () => void
+  signOut(): Promise<void>
+  // adult accounts (server only)
+  signUpAdult(input: SignUpInput): Promise<{ needsEmailConfirmation: boolean }>
+  /** always resolves the same way, whether or not the address has an account */
+  requestPasswordReset(email: string): Promise<void>
+  updatePassword(newPassword: string): Promise<void>
+  // parent: a child's account, and approving this device for the child's PIN sign-in (server only)
+  createChild(s: Session, input: NewChildInput): Promise<{ studentId: string }>
+  enrollThisDevice(s: Session, studentId: string): Promise<void>
   // admin
   listAdults(s: Session): Promise<Adult[]>
   listStudents(s: Session): Promise<Student[]>

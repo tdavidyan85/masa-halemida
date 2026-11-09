@@ -1,10 +1,14 @@
 import { useState } from 'react'
+import type { FormEvent } from 'react'
 import { Link } from 'react-router'
 import { useSession } from '../auth/AuthContext'
 import { AsyncView, EmptyState } from '../components/States'
 import { Avatar, Badge, Card, KIND_TEXT, PageHeader, PersonChip, ProgressBadge, ProgressBar, formatDate } from '../components/ui'
 import { useData } from '../data'
-import { SUBJECTS } from '../data/types'
+import { GRADES, SUBJECTS } from '../data/types'
+import type { Grade } from '../data/types'
+import { DemoOnlyError } from '../data/source'
+import type { NewChildInput } from '../data/source'
 import type { ChildOverview } from '../data/source'
 import { useAsync } from '../hooks/useAsync'
 
@@ -16,15 +20,56 @@ const noKids = <EmptyState emoji="👶" title="עוד לא הוספת ילדים
 
 export function ParentHome() {
   const st = useChildren(), s = useSession()
+  const [adding, setAdding] = useState(false)
   return (
     <>
-      <PageHeader emoji="👪" title={`שלום ${s.fullName.split(' ')[0]}`} subtitle="הילדים שלך והמשימות שלהם." />
+      <PageHeader emoji="👪" title={`שלום ${s.fullName.split(' ')[0]}`} subtitle="הילדים שלך והמשימות שלהם."
+        actions={<button className="btn btn-primary" onClick={() => setAdding(a => !a)}>{adding ? 'סגירה' : '+ ילד/ה'}</button>} />
+      {adding && <AddChildForm onDone={() => { setAdding(false); st.reload() }} />}
       <AsyncView state={st} isEmpty={l => l.length === 0} empty={noKids}>
         {kids => (
           <div className="grid-cards">{kids.map(k => <ChildCard key={k.student.id} k={k} />)}</div>
         )}
       </AsyncView>
     </>
+  )
+}
+
+function AddChildForm({ onDone }: { onDone(): void }) {
+  const data = useData(), s = useSession()
+  const [f, setF] = useState<NewChildInput>({ fullName: '', birthDate: '', grade: 'א', relation: 'אמא', loginMode: 'pin', pin: '', username: '', password: '' })
+  const [msg, setMsg] = useState<{ kind: 'error' | 'note'; text: string } | null>(null)
+  const [busy, setBusy] = useState(false)
+  const set = (k: keyof NewChildInput) => (e: { target: { value: string } }) => setF(x => ({ ...x, [k]: e.target.value }))
+  async function submit(e: FormEvent) {
+    e.preventDefault(); setMsg(null)
+    if (f.fullName.trim().length < 2 || !f.birthDate) return setMsg({ kind: 'error', text: 'צריך שם מלא ותאריך לידה' })
+    if (f.loginMode === 'pin' && !/^\d{6}$/.test(f.pin ?? '')) return setMsg({ kind: 'error', text: 'הקוד צריך להיות 6 ספרות' })
+    if (f.loginMode === 'password' && ((f.password ?? '').length < 8 || !f.username)) return setMsg({ kind: 'error', text: 'צריך שם משתמש וסיסמה של 8 תווים לפחות' })
+    setBusy(true)
+    try { await data.createChild(s, f); onDone() }
+    catch (x) { setMsg({ kind: x instanceof DemoOnlyError ? 'note' : 'error', text: (x as Error).message }) }
+    finally { setBusy(false) }
+  }
+  return (
+    <Card title="חשבון לילד/ה" className="form-card">
+      <p className="muted">רק הורה שאימת דוא״ל וטלפון יכול ליצור חשבון. אם כבר יש לילד חשבון (למשל מההורה השני), מבקשים מההורה השני להזמין אותך, כדי שלא ייווצר חשבון כפול.</p>
+      <form onSubmit={submit} className="form-grid" noValidate>
+        <label className="field">שם מלא<input value={f.fullName} onChange={set('fullName')} /></label>
+        <label className="field">תאריך לידה<input type="date" value={f.birthDate} onChange={set('birthDate')} /></label>
+        <label className="field">כיתה<select value={f.grade} onChange={set('grade')}>{GRADES.map((g: Grade) => <option key={g} value={g}>{g === 'גן' ? 'גן חובה' : `כיתה ${g}`}</option>)}</select></label>
+        <label className="field">אני<select value={f.relation} onChange={set('relation')}>{['אמא', 'אבא', 'אפוטרופוס/ית'].map(r => <option key={r}>{r}</option>)}</select></label>
+        <label className="field">דרך כניסה<select value={f.loginMode} onChange={set('loginMode')}><option value="pin">תמונה וקוד (לילדים צעירים)</option><option value="password">שם משתמש וסיסמה</option></select></label>
+        {f.loginMode === 'pin'
+          ? <label className="field">קוד של 6 ספרות<input inputMode="numeric" dir="ltr" maxLength={6} value={f.pin} onChange={set('pin')} /></label>
+          : <>
+              <label className="field">שם משתמש<input dir="ltr" value={f.username} onChange={set('username')} /></label>
+              <label className="field">סיסמה<input type="password" dir="ltr" autoComplete="new-password" value={f.password} onChange={set('password')} /></label>
+            </>}
+        {msg && <p className={`wide ${msg.kind === 'note' ? 'form-note' : 'form-error'}`} role="alert">{msg.text}</p>}
+        <div className="wide"><button className="btn btn-primary" disabled={busy}>{busy ? 'יוצרים…' : 'יצירת החשבון'}</button></div>
+      </form>
+    </Card>
   )
 }
 
@@ -150,7 +195,10 @@ export function ParentSettings() {
   const data = useData(), s = useSession()
   const [note, setNote] = useState('')
   async function release(id: string, name: string) {
-    try { await data.releaseLock(s, id); setNote(`החשבון של ${name} שוחרר (בהדגמה).`) } catch (x) { setNote((x as Error).message) }
+    try { await data.releaseLock(s, id); setNote(`החשבון של ${name} שוחרר${data.kind === 'mock' ? ' (בהדגמה)' : ''}.`) } catch (x) { setNote((x as Error).message) }
+  }
+  async function enroll(id: string, name: string) {
+    try { await data.enrollThisDevice(s, id); setNote(`המכשיר הזה אושר. ${name} יכול/ה להיכנס ממנו עם התמונה והקוד.`) } catch (x) { setNote((x as Error).message) }
   }
   return (
     <>
@@ -164,6 +212,7 @@ export function ParentSettings() {
                 <div className="row wrap">
                   <button className="btn btn-small btn-secondary" disabled title="יופעל כשיהיה שרת">{k.student.loginMode === 'pin' ? 'קוד חדש' : 'סיסמה חדשה'}</button>
                   <button className="btn btn-small btn-secondary" onClick={() => release(k.student.id, k.student.fullName)}>שחרור נעילה</button>
+                  {k.student.loginMode === 'pin' && <button className="btn btn-small btn-secondary" onClick={() => enroll(k.student.id, k.student.fullName)}>לאשר את המכשיר הזה</button>}
                 </div>
               </div>
               <div><b>אישורים פעילים</b>

@@ -7,7 +7,7 @@
 ```bash
 cd supabase
 npm install
-npm test        # מרים PostgreSQL 17 זמני (embedded-postgres), מחיל הכול, מריץ 44 בדיקות ומוחק
+npm test        # מרים PostgreSQL 17 זמני (embedded-postgres), מחיל הכול, מריץ 75 בדיקות ומוחק
 ```
 
 אין צורך ב-Docker או ב-Supabase CLI. הבדיקות רצות על שרת PostgreSQL אמיתי, אבל **לא על Supabase עצמו**:
@@ -32,10 +32,41 @@ npm test        # מרים PostgreSQL 17 זמני (embedded-postgres), מחיל 
 | `…120600_rls_policies` | RLS לכל טבלה, הרשאות עד רמת העמודה |
 | `…120700_rpc` | `request_role`, `admin_set_role`, `admin_set_profile_status`, `create_invitation`, `respond_invitation`, `remove_member`, `grant_consent`, `revoke_consent` |
 | `…120800_avatars_storage` | דלי `avatars` פרטי ומדיניות לתמונות פרופיל (בלי תמונות) |
+| `…130000_student_auth` | הורה מאומת, `student_devices`, `login_attempts`, `enroll_device`/`revoke_device`/`release_student_lock`, פונקציות `srv_*` לשרת בלבד |
+| `…130100_invited_group_visibility` | הורה מוזמן רואה את הקבוצה שאליה הוזמן, אבל לא את התלמידים שבה |
+
+## התחברות תלמידים וחשבונות ילדים (`functions/`)
+
+**עיקרון:** ה-session תמיד מגיע מ-Supabase Auth. אנחנו לא מנפיקים טוקן או JWT בעצמנו.
+
+**יצירת חשבון (`manage-student`):**
+- רק הורה מאומת יכול ליצור חשבון לילד. "מאומת" = דוא״ל ו**טלפון** מאומתים, שניהם דרך OTP של Supabase Auth.
+- לילד נוצר משתמש Auth עם כתובת `.invalid` שלא מקבלת דואר, וסיסמה אקראית שנזרקת מיד.
+- ה-PIN או הסיסמה שהילד יודע נשמרים כ-hash (PBKDF2-SHA256, 600 אלף סבבים) ב-`student_credentials`.
+
+**כניסה (`student-login`):**
+1. בודקת חסימה לפי כתובת: עד 30 ניסיונות ב-15 דקות.
+2. בודקת נעילה של החשבון: 5 טעויות = 15 דקות, 10 = רק הורה משחרר.
+3. כניסה ב-PIN מותרת רק ממכשיר שהורה אישר.
+4. מאמתת את ה-hash.
+5. רק אחרי כל זה מבקשת מ-Supabase Auth session רגיל, דרך `auth.admin.generateLink` ואז `auth.verifyOtp`.
+
+| נבדק | לא נבדק עדיין (דורש Supabase אמיתי, `supabase start`) |
+|---|---|
+| כל הלוגיקה והמגבלות: 30 בדיקות, חלקן מול ה-PostgreSQL המקומי עם פונקציות ה-SQL האמיתיות | השלב `generateLink` + `verifyOtp` עצמו |
+| | `verify_jwt` |
+| | CORS |
+| | משתני הסביבה |
+| | זמני הריצה של PBKDF2 בתוך Edge Functions |
+| | אימות הטלפון (דורש ספק SMS) |
+
+**חלופות, אם `generateLink` + `verifyOtp` לא יתאים בבדיקה:**
+- כניסה עם סיסמה אמיתית של Supabase לתלמידים הבוגרים, שאז עוקפת את הנעילה שלנו.
+- ספק זהות חיצוני דרך Third-party Auth של Supabase.
 
 ## כללים שחשוב לדעת כשמחברים את הפורטל
 
 - **אין `select('*')`** על `students` ועל `invitations`: חלק מהעמודות חסומות (תאריך לידה, שם משתמש, hash של הדוא״ל). בוחרים עמודות במפורש.
 - **כתיבות רגישות רק דרך RPC:** הצטרפות לקבוצה, הסרת תלמיד, הסכמות ותפקידים. אין להן `insert`/`update` ישיר.
-- **חשבונות תלמידים, PIN ונעילה:** נוצרים רק בצד השרת (Edge Function עם service role), שעוד לא נכתב.
+- **חשבונות תלמידים, PIN ונעילה:** רק בצד השרת: הפונקציות `manage-student` ו-`student-login` עם service role, והפונקציות `srv_*` במסד הנתונים, שזמינות רק ל-service role.
 - המיגרציות **לא נוגעות** בטבלאות הקיימות (`feedback`, `usage_events`, `tts_usage`) ולא ב-`src/sql/001_packs_ingest.sql`.

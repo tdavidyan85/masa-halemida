@@ -1,27 +1,51 @@
-import { createContext, useCallback, useContext, useMemo, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
+import { useData } from '../data'
 import type { Role, Session } from '../data/types'
 
-// DEMO session: kept in memory and in sessionStorage (this tab only) so a page reload keeps you signed in.
-// It holds only the fictional demo user. A real session will come from Supabase Auth – and the server,
-// not this object, will decide what each user may read or change.
-const KEY = 'masa-portal-demo-session'
+// The signed-in user, as the data source reports it.
+//   demo:   a fictional session kept in this tab by MockSource
+//   server: Supabase Auth (restored on load, refreshed automatically, shared between tabs)
+// What a user may read or change is decided by the server (RLS / Edge Functions), never by this object.
 
-function load(): Session | null {
-  try { const v = sessionStorage.getItem(KEY); return v ? JSON.parse(v) as Session : null } catch { return null }
+interface AuthValue {
+  session: Session | null
+  /** false until the stored session has been checked – screens wait instead of bouncing to sign-in */
+  ready: boolean
+  /** the user arrived from a password-reset e-mail and must now choose a new password */
+  recovery: boolean
+  signIn(s: Session): void
+  signOut(): Promise<void>
+  clearRecovery(): void
 }
-function persist(s: Session | null) {
-  try { if (s) sessionStorage.setItem(KEY, JSON.stringify(s)); else sessionStorage.removeItem(KEY) } catch { /* private mode */ }
-}
-
-interface AuthValue { session: Session | null; signIn(s: Session): void; signOut(): void }
 const AuthContext = createContext<AuthValue | null>(null)
 
 export function AuthProvider({ children, initial }: { children: ReactNode; initial?: Session | null }) {
-  const [session, setSession] = useState<Session | null>(() => (initial !== undefined ? initial : load()))
-  const signIn = useCallback((s: Session) => { setSession(s); persist(s) }, [])
-  const signOut = useCallback(() => { setSession(null); persist(null) }, [])
-  const value = useMemo(() => ({ session, signIn, signOut }), [session, signIn, signOut])
+  const source = useData()
+  const [session, setSession] = useState<Session | null>(initial ?? null)
+  const [ready, setReady] = useState(initial !== undefined)
+  const [recovery, setRecovery] = useState(false)
+
+  useEffect(() => {
+    let alive = true
+    if (initial === undefined) {
+      source.currentSession().then(
+        s => { if (alive) { setSession(s); setReady(true) } },
+        () => { if (alive) { setSession(null); setReady(true) } },
+      )
+    }
+    const off = source.onSessionChange((s, event) => {
+      if (!alive) return
+      setSession(s); setReady(true)
+      if (event === 'password_recovery') setRecovery(true)
+    })
+    return () => { alive = false; off() }
+  }, [source, initial])
+
+  const signIn = useCallback((s: Session) => { setSession(s); setReady(true) }, [])
+  const signOut = useCallback(async () => { try { await source.signOut() } finally { setSession(null) } }, [source])
+  const clearRecovery = useCallback(() => setRecovery(false), [])
+  const value = useMemo(() => ({ session, ready, recovery, signIn, signOut, clearRecovery }), [session, ready, recovery, signIn, signOut, clearRecovery])
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
 

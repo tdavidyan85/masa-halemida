@@ -20,6 +20,26 @@ npm run dev          # http://localhost:5173
 | `npm run build` | בדיקת טיפוסים ובנייה ל-`dist/` |
 | `npm run preview` | מגיש את `dist/` מקומית |
 
+## מצב שרת (פיתוח בלבד, עוד לא נבדק מול Supabase אמיתי)
+
+ברירת המחדל היא הדגמה. חיבור לשרת נפתח **רק** עם הגדרות מלאות ותקינות ב-`.env.local` (ראו `.env.example`):
+`VITE_DATA_SOURCE=supabase`, `VITE_SUPABASE_ENV=local|dev`, כתובת ומפתח **ציבורי**.
+
+`src/data/config.ts` עוצר את האפליקציה עם הודעה ברורה כשיש בעיה. הוא דוחה:
+- כתובת לא תואמת לסביבה
+- את פרויקט האתר החי
+- מפתח סודי (service role)
+- כל דבר חסר
+
+| יכולת | איך |
+|---|---|
+| כניסת מבוגרים, הרשמה, אימות דוא״ל, שחזור סיסמה | Supabase Auth (PKCE): `signInWithPassword`, `signUp`, `resetPasswordForEmail`, `updateUser` |
+| כניסת תלמידים | הפונקציה `student-login` מחזירה session של Supabase, שעובר ל-`auth.setSession` |
+| יצירת חשבון ילד | הפונקציה `manage-student`, להורה מאומת בלבד |
+| הזמנות ואישורים | RPC: `create_invitation`, `respond_invitation` |
+
+משימות, התקדמות וציונים עוד לא קיימים במסד הנתונים. במצב שרת הם מוצגים כרשימות ריקות.
+
 ## חשבונות לדוגמה
 
 | תפקיד | כניסה |

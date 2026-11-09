@@ -2,6 +2,7 @@ import { NavLink, Outlet, useNavigate } from 'react-router'
 import { ROLE_NAME, useAuth } from '../auth/AuthContext'
 import type { Role } from '../data/types'
 import { Avatar } from './ui'
+import { useData } from '../data'
 
 export interface NavItem { to: string; label: string; emoji: string; end?: boolean }
 
@@ -33,7 +34,16 @@ export const NAV: Record<Role, NavItem[]> = {
   ],
 }
 
+/** always visible: which mode the portal is in. The server mode is development only until verified. */
 export function DemoBanner() {
+  const { kind } = useData()
+  if (kind === 'supabase') {
+    return (
+      <div className="demo-banner dev-banner" role="note">
+        <b>שרת פיתוח.</b> מחובר לסביבת פיתוח, לא לייצור. לא להכניס נתונים אמיתיים של ילדים.
+      </div>
+    )
+  }
   return (
     <div className="demo-banner" role="note">
       <b>מצב הדגמה.</b> כל השמות והתמונות פיקטיביים. אין כאן התחברות אמיתית או הרשאות מאובטחות, ושום דבר לא נשמר בשרת.

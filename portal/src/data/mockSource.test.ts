@@ -3,7 +3,7 @@ import { MockSource } from './mockSource'
 import { ForbiddenError, LoginError } from './source'
 import { DEMO_PASSWORD, DEMO_PIN } from './mockData'
 import { createDataSource } from '.'
-import { NotConnectedError } from './supabaseSource'
+import { ConfigError } from './config'
 
 const src = () => new MockSource()
 const signIn = (email: string) => src().signInAdult(email, DEMO_PASSWORD)
@@ -110,7 +110,7 @@ describe('data source selection', () => {
   it('uses the mock source by default', () => {
     expect(createDataSource({}).kind).toBe('mock')
   })
-  it('refuses "supabase" until the backend is built (no silent fallback)', () => {
-    expect(() => createDataSource({ VITE_DATA_SOURCE: 'supabase' })).toThrow(NotConnectedError)
+  it('refuses "supabase" without complete settings (no silent fallback to demo)', () => {
+    expect(() => createDataSource({ VITE_DATA_SOURCE: 'supabase' })).toThrow(ConfigError)
   })
 })
