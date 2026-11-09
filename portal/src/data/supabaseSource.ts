@@ -13,7 +13,8 @@ import type { SupabaseClient, User } from '@supabase/supabase-js'
 import { sampleAvatar } from './avatar'
 import { ForbiddenError, LoginError, ServerError } from './source'
 import type { AssignmentInput, ChildOverview, DataSource, GroupDetail, NewChildInput, PinProfile, SessionEvent, SignUpInput, StudentTask } from './source'
-import type { Adult, Assignment, AssignmentProgress, Consent, Grade, Group, Invitation, LearningSession, Material, PracticeEvent, QuizItem, QuizResult, Role, Session, Student, SubjectId, SubjectProgress } from './types'
+import type { Adult, Assignment, AssignmentProgress, Consent, ContentDraft, Grade, Group, Invitation, LearningSession, Material, MaterialDetail, MaterialShare, MaterialTopic, PracticeEvent, QuizItem, QuizResult, Role, Session, Student, SubjectId, SubjectProgress } from './types'
+import { checkPack, templatePack } from '../../../supabase/functions/_shared/content'
 import type { DataConfig } from './config'
 
 type ServerConfig = Extract<DataConfig, { mode: 'server' }>
@@ -42,6 +43,12 @@ function saveDeviceToken(studentId: string, token: string) {
 }
 
 type Row = Record<string, unknown>
+const MATERIAL_COLS = 'id, owner_id, title, storage_path, status, created_at, mime_type, size_bytes, extraction_status, page_count'
+const toMaterial = (r: Row): Material => ({ id: String(r.id), ownerId: String(r.owner_id), title: String(r.title), fileName: String(r.storage_path ?? '').split('/').pop() ?? '',
+  pages: Number(r.page_count ?? 0), status: r.status as Material['status'], uploadedAt: String(r.created_at).slice(0, 10), mimeType: (r.mime_type as string | null) ?? undefined,
+  sizeBytes: r.size_bytes == null ? undefined : Number(r.size_bytes), extractionStatus: (r.extraction_status as Material['extractionStatus']) ?? undefined })
+const toDraft = (r: Row): ContentDraft => ({ id: String(r.id), materialId: String(r.material_id), provider: r.provider as ContentDraft['provider'],
+  status: r.status as ContentDraft['status'], pack: r.pack as Record<string, unknown>, createdAt: String(r.created_at) })
 const ASSIGNMENT_COLS = 'id, group_id, title, instructions, kind, player_path, status, due_at'
 const STATUS_COLS = 'assignment_id, student_id, state, practice_questions, practice_first_try, verified_score, verified_max, attempts, last_activity_at'
 /** readable names for the engine's topic codes (unknown codes are shown as they are) */
@@ -319,9 +326,77 @@ export class SupabaseSource implements DataSource {
     return assignments.map(a => ({ ...a, group: groups.find(g => g.id === a.groupId)! }))
   }
   async myMaterials(s: Session): Promise<Material[]> {
-    const rows = check(await this.sb.from('learning_materials').select('id, title, storage_path, status, created_at').eq('owner_id', s.userId)) as Row[]
-    return rows.map(r => ({ id: String(r.id), ownerId: s.userId, title: String(r.title), fileName: String(r.storage_path ?? '').split('/').pop() ?? '',
-      pages: 0, status: r.status as Material['status'], uploadedAt: String(r.created_at).slice(0, 10) }))
+    return (check(await this.sb.from('learning_materials').select(MATERIAL_COLS).eq('owner_id', s.userId).order('created_at', { ascending: false })) as Row[]).map(toMaterial)
+  }
+
+  // ================= materials =================
+  async uploadMaterial(_s: Session, file: File, title: string): Promise<Material> {
+    // the server checks role, type and size, and decides the path; the file may only go to that exact path
+    const r = check(await this.sb.rpc('create_material', { p_title: title.trim() || file.name, p_mime: file.type, p_size: file.size })) as { id: string; path: string }
+    const up = await this.sb.storage.from('materials').upload(r.path, file, { contentType: file.type, upsert: false })
+    if (up.error) {
+      await this.sb.from('learning_materials').delete().eq('id', r.id)       // no record without a file
+      throw toUserError(up.error)
+    }
+    return toMaterial(check(await this.sb.from('learning_materials').select(MATERIAL_COLS).eq('id', r.id).single()) as Row)
+  }
+  async materialDetail(s: Session, id: string): Promise<MaterialDetail> {
+    const row = check(await this.sb.from('learning_materials').select(MATERIAL_COLS).eq('id', id).maybeSingle()) as Row | null
+    if (!row) throw new ForbiddenError('החומר לא נמצא או שאין לך גישה אליו')
+    const owner = row.owner_id === s.userId
+    const shares = (check(await this.sb.from('material_shares').select('group_id, student_id').eq('material_id', id)) as Row[])
+      .map(x => ({ groupId: (x.group_id as string | null) ?? undefined, studentId: (x.student_id as string | null) ?? undefined }))
+    if (!owner) return { material: toMaterial(row), owner, text: null, topics: [], drafts: [], shares }
+    const [text, topics, drafts] = await Promise.all([
+      this.sb.rpc('material_text', { p_material: id }).then(check) as Promise<string | null>,
+      this.sb.from('material_topics').select('position, title, body').eq('material_id', id).order('position').then(check) as Promise<Row[]>,
+      this.sb.from('content_drafts').select('id, material_id, provider, status, pack, created_at').eq('material_id', id).order('created_at', { ascending: false }).then(check) as Promise<Row[]>,
+    ])
+    return { material: toMaterial(row), owner, text, topics: topics.map(t => ({ title: String(t.title), body: String(t.body) })), drafts: drafts.map(toDraft), shares }
+  }
+  async materialFileUrl(_s: Session, id: string) {
+    const row = check(await this.sb.from('learning_materials').select('storage_path').eq('id', id).maybeSingle()) as Row | null
+    if (!row?.storage_path) throw new ForbiddenError('אין גישה לקובץ')
+    const { data, error } = await this.sb.storage.from('materials').createSignedUrl(String(row.storage_path), 300)
+    if (error || !data) throw toUserError(error)
+    return data.signedUrl
+  }
+  async saveExtraction(_s: Session, id: string, text: string, pages: number) { check(await this.sb.rpc('save_extraction', { p_material: id, p_text: text, p_pages: pages })) }
+  async saveTopics(_s: Session, id: string, topics: MaterialTopic[]) {
+    check(await this.sb.from('material_topics').delete().eq('material_id', id))
+    const rows = topics.filter(t => t.title.trim()).slice(0, 200).map((t, i) => ({ material_id: id, position: i + 1, title: t.title.trim().slice(0, 200), body: t.body.slice(0, 20000) }))
+    if (rows.length) check(await this.sb.from('material_topics').insert(rows))
+  }
+  private async draftById(id: string): Promise<ContentDraft> {
+    return toDraft(check(await this.sb.from('content_drafts').select('id, material_id, provider, status, pack, created_at').eq('id', id).single()) as Row)
+  }
+  async createTemplateDraft(_s: Session, id: string, meta: { subjectName: string; grade: string }) {
+    const m = check(await this.sb.from('learning_materials').select('title').eq('id', id).single()) as Row
+    const topics = (check(await this.sb.from('material_topics').select('title, body').eq('material_id', id).order('position')) as Row[]).map(t => ({ title: String(t.title), body: String(t.body) }))
+    if (!topics.length) throw new LoginError('קודם יוצרים נושאים')
+    const pack = templatePack(topics, { ...meta, unit: String(m.title) })
+    if (checkPack(pack).length) throw new LoginError('בחומר הזה אין מספיק משפטים לבניית שאלות')
+    return this.draftById(check(await this.sb.rpc('save_content_draft', { p_material: id, p_pack: pack, p_provider: 'template' })) as string)
+  }
+  async requestAiDraft(_s: Session, id: string, meta: { subjectName: string; grade: string }) {
+    const { data, error } = await this.sb.functions.invoke('generate-content', { body: { materialId: id, ...meta } })
+    if (error) {
+      const res = (error as { context?: Response }).context
+      const j = res && typeof res.json === 'function' ? await res.json().catch(() => null) as Row | null : null
+      if (j?.message) throw new ServerError(String(j.message))
+      throw toUserError(error)
+    }
+    return this.draftById(String((data as Row).draftId))
+  }
+  async reviewDraft(_s: Session, draftId: string, approve: boolean) { check(await this.sb.rpc('review_content_draft', { p_draft: draftId, p_approve: approve })) }
+  async quizFromDraft(_s: Session, draftId: string, groupId: string, title: string) {
+    return check(await this.sb.rpc('quiz_from_draft', { p_draft: draftId, p_group: groupId, p_title: title })) as string
+  }
+  async shareMaterial(_s: Session, id: string, target: MaterialShare) {
+    check(await this.sb.rpc('share_material', { p_material: id, p_group: target.groupId ?? null, p_student: target.studentId ?? null }))
+  }
+  async sharedWithMe(s: Session): Promise<Material[]> {
+    return (check(await this.sb.from('learning_materials').select(MATERIAL_COLS).neq('owner_id', s.userId)) as Row[]).map(toMaterial)
   }
   async myInvitations(s: Session) {
     const rows = check(await this.sb.from('invitations').select('id, group_id, invited_by, child_hint, status, created_at').eq('invited_by', s.userId)) as Row[]

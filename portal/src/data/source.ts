@@ -2,7 +2,8 @@
 // Later: a Supabase implementation of the same interface, where every rule below is enforced by RLS and
 // Edge Functions on the server. The screens never talk to a backend directly.
 import type {
-  Adult, Assignment, AssignmentProgress, Consent, Group, Guardianship, Invitation, LearningSession, Material, PracticeEvent, QuizItem, QuizResult,
+  Adult, Assignment, AssignmentProgress, Consent, ContentDraft, Group, Guardianship, Invitation, LearningSession, Material, MaterialDetail,
+  MaterialShare, MaterialTopic, PracticeEvent, QuizItem, QuizResult,
   Session, Student, SubjectProgress,
 } from './types'
 import type { CheckResult } from '../auth/attemptLimiter'
@@ -103,6 +104,21 @@ export interface DataSource {
   myStudents(s: Session): Promise<(Student & { groups: Group[] })[]>
   myAssignments(s: Session): Promise<(Assignment & { group: Group })[]>
   myMaterials(s: Session): Promise<Material[]>
+  // learning materials (teachers and parents; students only read what was shared with them)
+  uploadMaterial(s: Session, file: File, title: string): Promise<Material>
+  materialDetail(s: Session, id: string): Promise<MaterialDetail>
+  materialFileUrl(s: Session, id: string): Promise<string>
+  saveExtraction(s: Session, id: string, text: string, pages: number): Promise<void>
+  saveTopics(s: Session, id: string, topics: MaterialTopic[]): Promise<void>
+  /** a draft built by fixed rules (no AI) from the topics */
+  createTemplateDraft(s: Session, id: string, meta: { subjectName: string; grade: string }): Promise<ContentDraft>
+  /** an AI draft made on the server; fails with a clear message when no AI provider is configured */
+  requestAiDraft(s: Session, id: string, meta: { subjectName: string; grade: string }): Promise<ContentDraft>
+  reviewDraft(s: Session, draftId: string, approve: boolean): Promise<void>
+  /** an APPROVED draft's multiple-choice questions → a draft quiz assignment for one of the teacher's groups */
+  quizFromDraft(s: Session, draftId: string, groupId: string, title: string): Promise<string>
+  shareMaterial(s: Session, id: string, target: MaterialShare): Promise<void>
+  sharedWithMe(s: Session): Promise<Material[]>
   myInvitations(s: Session): Promise<(Invitation & { group: Group })[]>
   createGroup(s: Session, input: Pick<Group, 'name' | 'subject' | 'grade'>): Promise<Group>
   inviteParent(s: Session, groupId: string, parentEmail: string, childHint: string): Promise<Invitation>

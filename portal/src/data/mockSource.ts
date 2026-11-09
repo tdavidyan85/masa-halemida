@@ -4,7 +4,9 @@ import * as D from './mockData'
 import { AttemptLimiter } from '../auth/attemptLimiter'
 import { DemoOnlyError, ForbiddenError, LoginError } from './source'
 import type { AssignmentInput, ChildOverview, DataSource, GroupDetail, NewChildInput, PinProfile, SessionEvent, SignUpInput, StudentTask } from './source'
-import type { Adult, Assignment, Group, Invitation, LearningSession, PracticeEvent, QuizResult, Role, Session, Student } from './types'
+import type { Adult, Assignment, ContentDraft, Group, Invitation, LearningSession, Material, MaterialShare, MaterialTopic, PracticeEvent, QuizResult, Role, Session, Student } from './types'
+import { checkPack, templatePack } from '../../../supabase/functions/_shared/content'
+import { ACCEPTED, MAX_BYTES } from '../materials/extract'
 
 export interface MockOptions { delayMs?: number; failWith?: string }
 
@@ -28,6 +30,11 @@ export class MockSource implements DataSource {
   private sessions = clone(D.SESSIONS)
   private eventIds = new Set<string>()
   private attempts = new Map<string, number>()
+  private files = new Map<string, string>()                 // material id → object URL (this tab only)
+  private texts = new Map<string, string>()
+  private topics = new Map<string, MaterialTopic[]>()
+  private drafts: ContentDraft[] = []
+  private shares: (MaterialShare & { materialId: string })[] = []
   readonly limiter = new AttemptLimiter()
   private listeners = new Set<(s: Session | null, e: SessionEvent) => void>()
 
@@ -143,7 +150,100 @@ export class MockSource implements DataSource {
     const mine = this.groups.filter(g => this.teaches(s, g))
     return this.wait(this.assignments.filter(a => mine.some(g => g.id === a.groupId)).map(a => ({ ...a, group: this.group(a.groupId) })))
   }
-  async myMaterials(s: Session) { this.need(s, 'teacher'); return this.wait(this.materials.filter(m => m.ownerId === s.userId)) }
+  async myMaterials(s: Session) { this.need(s, 'teacher', 'parent'); return this.wait(this.materials.filter(m => m.ownerId === s.userId)) }
+
+  // ---------- materials ----------
+  private ownMaterial(s: Session, id: string): Material {
+    this.need(s, 'teacher', 'parent')
+    const m = this.materials.find(x => x.id === id)
+    if (!m || m.ownerId !== s.userId) throw new ForbiddenError('החומר לא נמצא או שאינו שלך')
+    return m
+  }
+  private canRead(s: Session, m: Material) {
+    if (m.ownerId === s.userId || s.role === 'admin') return true
+    return this.shares.some(sh => sh.materialId === m.id && (
+      (sh.groupId && (this.group(sh.groupId).studentIds.includes(s.userId) || this.teaches(s, this.group(sh.groupId))
+        || (s.role === 'parent' && this.childrenOf(s.userId).some(c => this.group(sh.groupId!).studentIds.includes(c.studentId)))))
+      || (sh.studentId && (sh.studentId === s.userId || (s.role === 'parent' && this.childrenOf(s.userId).some(c => c.studentId === sh.studentId))))))
+  }
+  async uploadMaterial(s: Session, file: File, title: string) {
+    this.need(s, 'teacher', 'parent')
+    if (!(file.type in ACCEPTED)) throw new Error('אפשר להעלות רק PDF או תמונה (JPEG, PNG, WebP)')
+    if (file.size <= 0 || file.size > MAX_BYTES) throw new Error('הקובץ גדול מדי (עד 20MB)')
+    const m: Material = { id: 'm-' + Math.random().toString(36).slice(2, 8), ownerId: s.userId, title: title.trim() || file.name, fileName: file.name,
+      pages: 0, status: 'uploaded', uploadedAt: new Date().toISOString().slice(0, 10), mimeType: file.type, sizeBytes: file.size,
+      extractionStatus: file.type === 'application/pdf' ? 'pending' : 'unsupported' }
+    this.materials.push(m)
+    try { this.files.set(m.id, URL.createObjectURL(file)) } catch { /* no object URLs in tests */ }
+    return this.wait(m)
+  }
+  async materialDetail(s: Session, id: string) {
+    const m = this.materials.find(x => x.id === id)
+    if (!m || !this.canRead(s, m)) throw new ForbiddenError('החומר לא נמצא או שאין לך גישה אליו')
+    const owner = m.ownerId === s.userId
+    return this.wait({ material: m, owner, text: owner ? this.texts.get(id) ?? null : null, topics: owner ? this.topics.get(id) ?? [] : [],
+      drafts: owner ? this.drafts.filter(d => d.materialId === id) : [], shares: this.shares.filter(x => x.materialId === id).map(({ groupId, studentId }) => ({ groupId, studentId })) })
+  }
+  async materialFileUrl(s: Session, id: string) {
+    const m = this.materials.find(x => x.id === id)
+    if (!m || !this.canRead(s, m)) throw new ForbiddenError('אין גישה לקובץ')
+    const url = this.files.get(id)
+    if (!url) throw new Error('בהדגמה אפשר לפתוח רק קבצים שהועלו עכשיו')
+    return this.wait(url)
+  }
+  async saveExtraction(s: Session, id: string, text: string, pages: number) {
+    const m = this.ownMaterial(s, id)
+    this.texts.set(id, text.slice(0, 200000)); m.pages = pages; m.extractionStatus = text.trim() ? 'done' : 'failed'
+    await this.wait(null)
+  }
+  async saveTopics(s: Session, id: string, topics: MaterialTopic[]) {
+    this.ownMaterial(s, id)
+    this.topics.set(id, topics.filter(t => t.title.trim()).slice(0, 200).map(t => ({ title: t.title.trim().slice(0, 200), body: t.body.slice(0, 20000) })))
+    await this.wait(null)
+  }
+  async createTemplateDraft(s: Session, id: string, meta: { subjectName: string; grade: string }) {
+    const m = this.ownMaterial(s, id)
+    const topics = this.topics.get(id) ?? []
+    if (!topics.length) throw new Error('קודם יוצרים נושאים')
+    const pack = templatePack(topics, { ...meta, unit: m.title })
+    if (checkPack(pack).length) throw new Error('בחומר הזה אין מספיק משפטים לבניית שאלות')
+    const d: ContentDraft = { id: 'cd-' + Math.random().toString(36).slice(2, 8), materialId: id, provider: 'template', status: 'draft', pack, createdAt: new Date().toISOString() }
+    this.drafts.push(d)
+    return this.wait(d)
+  }
+  async requestAiDraft(s: Session, id: string): Promise<ContentDraft> {
+    this.ownMaterial(s, id)
+    throw new DemoOnlyError('בהדגמה אין יצירה עם בינה מלאכותית. אפשר להשתמש בתבנית האוטומטית.')
+  }
+  async reviewDraft(s: Session, draftId: string, approve: boolean) {
+    const d = this.drafts.find(x => x.id === draftId)
+    if (!d) throw new ForbiddenError('הטיוטה לא נמצאה')
+    this.ownMaterial(s, d.materialId)
+    if (d.status !== 'draft') throw new Error('הטיוטה כבר נבדקה')
+    d.status = approve ? 'approved' : 'rejected'
+    await this.wait(null)
+  }
+  async quizFromDraft(s: Session, draftId: string, groupId: string, title: string) {
+    this.need(s, 'teacher')
+    const d = this.drafts.find(x => x.id === draftId)
+    if (!d) throw new ForbiddenError('הטיוטה לא נמצאה')
+    this.ownMaterial(s, d.materialId)
+    if (d.status !== 'approved') throw new Error('קודם מאשרים את התוכן')
+    const pools = Object.values((d.pack.pools ?? {}) as Record<string, { items: { text: string; options: string[]; answer: string }[] }>)
+    const items = pools.flatMap(p => p.items).filter(it => Array.isArray(it.options) && it.options.includes(it.answer)).slice(0, 20)
+      .map((it, i) => ({ position: i + 1, prompt: it.text, options: it.options, answerIndex: it.options.indexOf(it.answer) }))
+    if (!items.length) throw new Error('בתוכן אין שאלות אמריקאיות')
+    return (await this.createAssignment(s, { groupId, title, instructions: '', kind: 'quiz', items })).id
+  }
+  async shareMaterial(s: Session, id: string, target: MaterialShare) {
+    this.ownMaterial(s, id)
+    if (!!target.groupId === !!target.studentId) throw new Error('משתפים עם קבוצה אחת או עם ילד אחד')
+    if (target.groupId && !(s.role === 'teacher' && this.teaches(s, this.group(target.groupId)))) throw new ForbiddenError('הקבוצה הזאת לא שלך')
+    if (target.studentId && !(s.role === 'parent' && this.childrenOf(s.userId).some(c => c.studentId === target.studentId))) throw new ForbiddenError('אפשר לשתף רק עם ילד שלך')
+    if (!this.shares.some(x => x.materialId === id && x.groupId === target.groupId && x.studentId === target.studentId)) this.shares.push({ materialId: id, ...target })
+    await this.wait(null)
+  }
+  async sharedWithMe(s: Session) { return this.wait(this.materials.filter(m => m.ownerId !== s.userId && this.canRead(s, m))) }
   async myInvitations(s: Session) {
     this.need(s, 'teacher')
     return this.wait(this.invitations.filter(i => i.invitedBy === s.userId).map(i => ({ ...i, group: this.group(i.groupId) })))

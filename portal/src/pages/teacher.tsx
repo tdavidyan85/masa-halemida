@@ -11,9 +11,6 @@ import type { Grade, Group, PlayerPath, QuizItem, SubjectId } from '../data/type
 import type { AssignmentInput } from '../data/source'
 import { useAsync } from '../hooks/useAsync'
 
-const MATERIAL_STATUS = {
-  uploaded: ['הועלה', 'neutral'], processing: ['בעיבוד', 'info'], ready_for_review: ['מחכה לבדיקה שלך', 'warn'], approved: ['מאושר', 'good'],
-} as const
 
 export function TeacherHome() {
   const data = useData(), s = useSession()
@@ -310,25 +307,4 @@ function AssignmentEditor({ groups, id, onDone }: { groups: Group[]; id: string 
   )
 }
 
-export function TeacherMaterials() {
-  const data = useData(), s = useSession()
-  const st = useAsync(() => data.myMaterials(s), [data, s.userId])
-  return (
-    <>
-      <PageHeader emoji="📄" title="חומרי לימוד" subtitle="מעלים דף עבודה או PDF, ה-AI מכין ממנו יחידת תרגול, ואת/ה בודק/ת ומאשר/ת לפני שתלמיד רואה." />
-      <div className="dropzone" aria-disabled="true">
-        <span aria-hidden>📤</span>
-        <b>העלאת קובץ</b>
-        <span className="muted">עדיין לא פעיל בהדגמה: לא מעלים כאן קבצים, ושום דבר לא נשלח ל-AI.</span>
-      </div>
-      <AsyncView state={st} isEmpty={l => l.length === 0} empty={<EmptyState emoji="📄" title="עוד לא העלית חומרים" />}>
-        {list => (
-          <Card><ul className="list">{list.map(m => (
-            <li key={m.id} className="list-row"><span><b>📄 {m.title}</b><small className="muted block" dir="ltr">{m.fileName} · {m.pages} עמ׳</small></span>
-              <Badge tone={MATERIAL_STATUS[m.status][1]}>{MATERIAL_STATUS[m.status][0]}</Badge></li>
-          ))}</ul></Card>
-        )}
-      </AsyncView>
-    </>
-  )
-}
+export { MaterialsPage as TeacherMaterials } from './materials'

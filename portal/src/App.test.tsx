@@ -10,6 +10,7 @@ import { MockSource } from './data/mockSource'
 import type { MockOptions } from './data/mockSource'
 import { ADULTS, DEMO_PASSWORD, DEMO_PIN, STUDENTS } from './data/mockData'
 import type { Role, Session } from './data/types'
+import { ForbiddenError } from './data/source'
 
 beforeEach(() => sessionStorage.clear())
 
@@ -324,5 +325,47 @@ describe('learning workflow (demo data source)', () => {
     expect(frame).toHaveAttribute('src', 'play/fractions/')
     expect(frame.getAttribute('src')).not.toMatch(/token|session|key|#|\?/)
     expect(screen.getByRole('status')).toHaveTextContent(/נשמרו 0 תשובות/)
+  })
+})
+
+describe('learning materials (demo data source)', () => {
+  const TEXT = 'פרק 1: מחזור המים\nהמים בים מתחממים בשמש והופכים לאדים. האדים עולים למעלה ויוצרים עננים גבוהים בשמיים.\nכשהעננים מתקררים, טיפות המים נופלות בחזרה כגשם. הגשם זורם בנחלים ומגיע שוב אל הים.\n\nפרק 2: צמחים\nהצמחים זקוקים לאור השמש כדי לייצר מזון. השורשים סופגים מים ומינרלים מהאדמה.\nהעלים הירוקים קולטים פחמן דו-חמצני מהאוויר ומשחררים חמצן לסביבה.'
+  it('teacher: upload → text → topics → template draft → approve → draft quiz; AI says it is not available', async () => {
+    URL.createObjectURL = () => 'blob:test'
+    const source = new MockSource({ delayMs: 0 })
+    const user = userEvent.setup({ applyAccept: false })
+    render(<Providers source={source} session={sessionFor('u-t1')}><MemoryRouter initialEntries={['/teacher/materials']}><AppRoutes /></MemoryRouter></Providers>)
+    await user.upload(await screen.findByLabelText(/^קובץ/), new File(['%PDF-1.4'], 'mayim.pdf', { type: 'application/pdf' }))
+    await user.click(screen.getByRole('button', { name: 'העלאה' }))
+    expect(await screen.findByRole('heading', { name: /mayim/ })).toBeInTheDocument()
+    const textArea = screen.getByLabelText('הטקסט (אפשר לתקן)')
+    await user.click(textArea); await user.paste(TEXT)
+    await user.click(screen.getByRole('button', { name: 'שמירת הטקסט' }))
+    await user.click(await screen.findByRole('button', { name: 'חלוקה אוטומטית לנושאים' }))
+    expect(screen.getByLabelText('שם נושא 1')).toHaveValue('מחזור המים')
+    expect(screen.getByLabelText('שם נושא 2')).toHaveValue('צמחים')
+    await user.click(screen.getByRole('button', { name: 'שמירת הנושאים' }))
+    await user.click(await screen.findByRole('button', { name: 'יצירה עם AI' }))
+    expect(await screen.findByRole('status')).toHaveTextContent('בהדגמה אין יצירה עם בינה מלאכותית')
+    await user.click(screen.getByRole('button', { name: 'יצירה לפי תבנית (ללא AI)' }))
+    expect(await screen.findByText('ממתין לבדיקה')).toBeInTheDocument()
+    expect(screen.getByText('תבנית, ללא AI')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'אישור' }))
+    await user.selectOptions(await screen.findByLabelText('לאיזו קבוצה'), 'g-math5')
+    await user.click(screen.getByRole('button', { name: 'יצירת מבחן' }))
+    const card = (await screen.findByRole('heading', { name: /מבחן: mayim/ })).closest('section')!
+    expect(within(card).getByText('טיוטה')).toBeInTheDocument()                    // still needs publishing
+  })
+  it('shared material reaches the group\'s students read-only; students have no materials page', async () => {
+    const source = new MockSource({ delayMs: 0 })
+    const t = sessionFor('u-t1')
+    const m = await source.uploadMaterial(t, new File(['x'], 'dapim.pdf', { type: 'application/pdf' }), 'דף מים')
+    await expect(source.uploadMaterial(sessionFor('s-tamar'), new File(['x'], 'a.pdf', { type: 'application/pdf' }), 'x')).rejects.toBeInstanceOf(ForbiddenError)
+    await expect(source.shareMaterial(t, m.id, { groupId: 'g-eng' })).resolves.toBeUndefined()      // co-teacher of g-eng
+    await expect(source.shareMaterial(t, m.id, { groupId: 'g-read' })).rejects.toBeInstanceOf(ForbiddenError)
+    render(<Providers source={source} session={sessionFor('s-tamar')}><MemoryRouter initialEntries={['/student/tasks']}><AppRoutes /></MemoryRouter></Providers>)
+    expect(await screen.findByText('📄 דף מים')).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /חומרים/ })).not.toBeInTheDocument()
+    expect((await source.materialDetail(sessionFor('s-tamar'), m.id)).text).toBeNull()
   })
 })

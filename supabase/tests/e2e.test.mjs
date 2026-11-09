@@ -258,6 +258,40 @@ describe('end-to-end on a local Supabase', { skip: !ready && 'set E2E_API_URL, E
     assert.deepEqual((await teacher.from('profiles').select('id').eq('id', st.kidId)).data, [])
   })
 
+  // ---------------- learning materials (real Storage, real functions) ----------------
+  it('materials: upload only to the server-chosen path; file type enforced by Storage; students never upload', async () => {
+    const pdf = new Blob([Uint8Array.from(Buffer.from('%PDF-1.4\n% test\n'))], { type: 'application/pdf' })
+    const m = (await teacher.rpc('create_material', { p_title: 'דף בדיקה', p_mime: 'application/pdf', p_size: pdf.size })).data
+    assert.match(m.path, new RegExp(`^${st.teacherId}/${m.id}/source\\.pdf$`))
+    assert.ok((await teacher.storage.from('materials').upload(`${st.teacherId}/${m.id}/other.pdf`, pdf)).error, 'any other path is refused')
+    assert.ok((await teacher.storage.from('materials').upload(m.path, new Blob(['<html>'], { type: 'text/html' }))).error, 'Storage refuses a non-allowed type')
+    assert.ifError((await teacher.storage.from('materials').upload(m.path, pdf)).error)
+    assert.ok((await kid.rpc('create_material', { p_title: 'x', p_mime: 'application/pdf', p_size: 10 })).error)
+    assert.ok((await kid.storage.from('materials').upload(m.path, pdf, { upsert: true })).error)
+    st.material = m
+  })
+  it('materials: unshared files are private; generate-content answers honestly that AI is not configured', async () => {
+    assert.ok((await parent.storage.from('materials').createSignedUrl(st.material.path, 60)).error, 'not shared → no access')
+    const signed = await teacher.storage.from('materials').createSignedUrl(st.material.path, 60)
+    assert.ifError(signed.error)
+    assert.equal((await fetch(signed.data.signedUrl)).status, 200)
+    const r = await fn(teacher, 'generate-content', { materialId: st.material.id })
+    assert.equal(r.status, 503, JSON.stringify(r.body)); assert.equal(r.body.error, 'ai_unavailable')
+    assert.equal((await fn(parent, 'generate-content', { materialId: st.material.id })).status, 403)       // not the owner
+  })
+  it('materials: a parent shares with own child only; the child reads it, the teacher does not', async () => {
+    const png = new Blob([Uint8Array.from([137, 80, 78, 71, 13, 10, 26, 10])], { type: 'image/png' })
+    const m = (await parent.rpc('create_material', { p_title: 'שיעורי בית', p_mime: 'image/png', p_size: png.size })).data
+    assert.ifError((await parent.storage.from('materials').upload(m.path, png)).error)
+    assert.ok((await parent2.rpc('share_material', { p_material: m.id, p_group: null, p_student: st.kidId })).error, 'not the owner')
+    assert.ifError((await parent.rpc('share_material', { p_material: m.id, p_group: null, p_student: st.kidId })).error)
+    const kidUrl = await kid.storage.from('materials').createSignedUrl(m.path, 60)
+    assert.ifError(kidUrl.error)
+    assert.equal((await fetch(kidUrl.data.signedUrl)).status, 200)
+    assert.ok((await teacher.storage.from('materials').createSignedUrl(m.path, 60)).error)
+    assert.ok((await stranger.storage.from('materials').createSignedUrl(m.path, 60)).error)
+  })
+
   // ---------------- private profile pictures (real Storage) ----------------
   it('Storage: a picture needs the photo consent; the child itself cannot upload', async () => {
     const png = new Blob([Uint8Array.from([137, 80, 78, 71, 13, 10, 26, 10])], { type: 'image/png' })

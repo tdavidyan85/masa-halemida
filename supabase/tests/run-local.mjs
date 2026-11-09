@@ -21,6 +21,6 @@ for (const k of ['API_URL', 'DB_URL', 'MAILPIT_URL']) {
 const testEnv = { ...process.env, TEST_DB_URL: env.DB_URL, E2E_API_URL: env.API_URL, E2E_ANON_KEY: env.ANON_KEY,
   E2E_SERVICE_ROLE_KEY: env.SERVICE_ROLE_KEY, E2E_MAILPIT_URL: env.MAILPIT_URL }
 console.log(`local Supabase: ${env.API_URL} (database ${new URL(env.DB_URL).host})`)
-const r = spawnSync(process.execPath, ['--test', '--test-concurrency=1', 'tests/rls.test.mjs', 'tests/learning.test.mjs', 'tests/functions.test.mjs', 'tests/e2e.test.mjs'],
+const r = spawnSync(process.execPath, ['--test', '--test-concurrency=1', 'tests/rls.test.mjs', 'tests/learning.test.mjs', 'tests/materials.test.mjs', 'tests/functions.test.mjs', 'tests/e2e.test.mjs'],
   { cwd: SUPA, stdio: 'inherit', env: testEnv })
 process.exit(r.status ?? 1)

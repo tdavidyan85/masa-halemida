@@ -231,3 +231,29 @@ describe('learning (phase 3)', () => {
     expect(d.progress.find(p => p.assignmentId === 'q1')).toMatchObject({ state: 'completed', verifiedScore: 1, verifiedMax: 1 })
   })
 })
+
+describe('materials (phase 4)', () => {
+  it('upload: the server decides the path; the file goes exactly there; a failed upload leaves no record', async () => {
+    const r = { id: 'mat-1', path: `${T}/mat-1/source.pdf` }
+    const ok = make({ rpc: { create_material: () => ({ data: r }) }, tables: { ...tables, learning_materials: [{ id: 'mat-1', owner_id: T, title: 'דף', storage_path: r.path, status: 'uploaded', created_at: '2026-11-10' }] } })
+    await ok.src.uploadMaterial(sess(T, 'teacher'), new File(['%PDF'], 'evil/../name.pdf', { type: 'application/pdf' }), 'דף')
+    expect(ok.calls.rpc[0]).toEqual({ fn: 'create_material', args: { p_title: 'דף', p_mime: 'application/pdf', p_size: 4 } })
+    expect(ok.calls.uploads).toEqual([{ bucket: 'materials', path: r.path, contentType: 'application/pdf', upsert: false }])
+    const bad = make({ rpc: { create_material: () => ({ data: r }) }, uploadError: 'new row violates row-level security policy',
+      tables: { ...tables, learning_materials: [{ id: 'mat-1', owner_id: T, title: 'דף', storage_path: r.path }] } })
+    await expect(bad.src.uploadMaterial(sess(T, 'teacher'), new File(['%PDF'], 'a.pdf', { type: 'application/pdf' }), 'דף')).rejects.toBeInstanceOf(ForbiddenError)
+    expect(bad.tables.learning_materials).toHaveLength(0)
+  })
+  it('a reader who is not the owner never asks for the text, topics or drafts', async () => {
+    const { src, calls } = make({ tables: { ...tables, learning_materials: [{ id: 'mat-1', owner_id: T, title: 'דף', storage_path: 'x', status: 'uploaded', created_at: '2026-11-10' }], material_shares: [] } })
+    const d = await src.materialDetail(sess(K1, 'student'), 'mat-1')
+    expect(d.owner).toBe(false); expect(d.text).toBeNull()
+    expect(calls.rpc.some(c => c.fn === 'material_text')).toBe(false)
+    expect(calls.selects.some(q => ['material_topics', 'content_drafts'].includes(q.table))).toBe(false)
+    expect(calls.selects.some(q => /extracted_text/.test(q.cols))).toBe(false)
+  })
+  it('AI: the server\'s "not configured" answer reaches the user as is; nothing is pretended', async () => {
+    const { src } = make({ functions: { 'generate-content': () => ({ status: 503, body: { error: 'ai_unavailable', message: 'יצירה עם בינה מלאכותית לא מוגדרת בשרת הזה' } }) } })
+    await expect(src.requestAiDraft(sess(T, 'teacher'), 'mat-1', { subjectName: 'מדעים', grade: 'ה' })).rejects.toThrow('לא מוגדרת')
+  })
+})

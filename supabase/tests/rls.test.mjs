@@ -112,7 +112,8 @@ describe('students: learn and look, change nothing', () => {
   }))
   it('cannot upload learning material', t(async s => {
     await s.as(U.S1)
-    assert.match((await s.fails(`insert into public.learning_materials (title) values ('שיעורי בית')`)).message, /row-level security/)
+    assert.match((await s.fails(`insert into public.learning_materials (title) values ('שיעורי בית')`)).message, /permission denied/)        // no direct writes at all
+    assert.match((await s.fails(`select public.create_material('שיעורי בית', 'application/pdf', 100)`)).message, /only teachers and parents/)
   }))
   it('cannot upload a profile picture, even their own', t(async s => {
     await s.as(U.S1)
@@ -187,10 +188,10 @@ describe('teachers: only students in their authorised groups', () => {
   }))
   it('teachers cannot read the audit log or other teachers\' materials', t(async s => {
     await s.as(U.T2)
-    await s.rows(`insert into public.learning_materials (title) values ('דף של מורה 2')`)
+    await s.rows(`select public.create_material('דף של מורה 2', 'application/pdf', 100)`)
     await s.as(U.T1)
     assert.equal((await s.rows(`select * from public.audit_log`)).length, 0)
-    assert.equal((await s.rows(`select * from public.learning_materials`)).length, 0)
+    assert.equal((await s.rows(`select id, title from public.learning_materials`)).length, 0)
   }))
 })
 

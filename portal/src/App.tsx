@@ -15,6 +15,7 @@ import { ForgotPassword, ResetPassword, SignUp } from './pages/login/AccountPage
 import { AdminGroups, AdminHome, AdminTeachers, AdminUsers } from './pages/admin'
 import { GroupDetailPage, TeacherAssignments, TeacherGroups, TeacherHome, TeacherMaterials, TeacherStudents } from './pages/teacher'
 import { ParentApprovals, ParentHome, ParentProgress, ParentSettings } from './pages/parent'
+import { MaterialPage, MaterialsPage } from './pages/materials'
 import { PlayPage, QuizPage, StudentHome, StudentProgress, StudentTasks, StudentTests } from './pages/student'
 
 export function Providers({ source, session, children }: { source: DataSource; session?: Session | null; children: ReactNode }) {
@@ -56,6 +57,7 @@ export function AppRoutes() {
         <Route path="students" element={<TeacherStudents />} />
         <Route path="assignments" element={<TeacherAssignments />} />
         <Route path="materials" element={<TeacherMaterials />} />
+        <Route path="materials/:materialId" element={<MaterialPage />} />
       </Route>
 
       <Route path="/parent" element={<RequireRole role="parent"><AppShell role="parent" /></RequireRole>}>
@@ -63,6 +65,8 @@ export function AppRoutes() {
         <Route path="approvals" element={<ParentApprovals />} />
         <Route path="progress" element={<ParentProgress />} />
         <Route path="settings" element={<ParentSettings />} />
+        <Route path="materials" element={<MaterialsPage />} />
+        <Route path="materials/:materialId" element={<MaterialPage />} />
       </Route>
 
       <Route path="/student" element={<RequireRole role="student"><AppShell role="student" /></RequireRole>}>

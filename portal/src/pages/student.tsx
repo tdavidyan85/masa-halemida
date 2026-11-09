@@ -9,6 +9,7 @@ import type { QuizResult } from '../data/types'
 import type { StudentTask } from '../data/source'
 import { useAsync } from '../hooks/useAsync'
 import { ProgressQueue, attachTelemetry, prepareEngineStorage } from '../player/bridge'
+import { SharedMaterials } from './materials'
 
 function useTasks() {
   const data = useData(), s = useSession()
@@ -89,6 +90,7 @@ export function StudentTasks() {
       <AsyncView state={st} isEmpty={l => l.length === 0} empty={<EmptyState emoji="🎈" title="אין לך משימות כרגע" />}>
         {tasks => <div className="task-grid">{tasks.map(t => <TaskCard key={t.id} t={t} onChange={st.reload} />)}</div>}
       </AsyncView>
+      <SharedMaterials />
     </>
   )
 }

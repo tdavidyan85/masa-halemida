@@ -25,6 +25,7 @@ export const NAV: Record<Role, NavItem[]> = {
     { to: '/parent', label: 'הילדים שלי', emoji: '🏠', end: true },
     { to: '/parent/approvals', label: 'אישורים', emoji: '✅' },
     { to: '/parent/progress', label: 'התקדמות', emoji: '📈' },
+    { to: '/parent/materials', label: 'חומרים', emoji: '📄' },
     { to: '/parent/settings', label: 'הגדרות', emoji: '⚙️' },
   ],
   student: [

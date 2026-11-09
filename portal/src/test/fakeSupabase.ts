@@ -18,6 +18,8 @@ export interface FakeOptions {
   /** access tokens accepted by setSession → the user they belong to */
   tokens?: Record<string, FakeUser>
   sessionUser?: FakeUser | null
+  /** make storage uploads fail (e.g. a policy refusal) */
+  uploadError?: string
 }
 
 export const CLOSED = { students: ['birth_date', 'username', 'created_by'], invitations: ['contact_hash'], student_devices: ['token_hash'] }
@@ -26,7 +28,7 @@ export function fakeSupabase(opts: FakeOptions = {}) {
   const tables: Record<string, Row[]> = structuredClone(opts.tables ?? {})
   const closed = { ...CLOSED, ...(opts.closed ?? {}) }
   const calls = { selects: [] as { table: string; cols: string }[], inserts: [] as { table: string; row: Row }[], rpc: [] as { fn: string; args: Row }[],
-    invoke: [] as { name: string; body: Row }[], auth: [] as { op: string; args: unknown }[] }
+    invoke: [] as { name: string; body: Row }[], auth: [] as { op: string; args: unknown }[], uploads: [] as Row[] }
   let user: FakeUser | null = opts.sessionUser ?? null
   let authCb: ((event: string, session: unknown) => void) | null = null
 
@@ -63,6 +65,7 @@ export function fakeSupabase(opts: FakeOptions = {}) {
       limit() { return b },
       eq(c: string, v: unknown) { st.filters.push(r => r[c] === v); return b },
       in(c: string, vs: unknown[]) { st.filters.push(r => vs.includes(r[c])); return b },
+      neq(c: string, v: unknown) { st.filters.push(r => r[c] !== v); return b },
       order() { return b },
       single() { st.one = 'single'; return b },
       maybeSingle() { st.one = 'maybe'; return b },
@@ -95,7 +98,10 @@ export function fakeSupabase(opts: FakeOptions = {}) {
         return r.status && r.status >= 400 ? fnError(r.status, r.body ?? {}) : { data: r.data ?? r.body ?? null, error: null }
       },
     },
-    storage: { from: () => ({ async createSignedUrl(path: string) { return { data: { signedUrl: `https://signed.test/${path}` }, error: null } } }) },
+    storage: { from: (bucket: string) => ({
+      async createSignedUrl(path: string) { return { data: { signedUrl: `https://signed.test/${path}` }, error: null } },
+      async upload(path: string, _f: unknown, o: Row) { calls.uploads.push({ bucket, path, ...o }); return opts.uploadError ? { data: null, error: { message: opts.uploadError } } : { data: { path }, error: null } },
+    }) },
     auth: {
       async getSession() { return { data: { session: sessionOf(user) }, error: null } },
       async signInWithPassword({ email, password }: { email: string; password: string }) {
