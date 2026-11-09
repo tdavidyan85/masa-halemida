@@ -4,7 +4,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'feature/**']   # development branches are tested too (tests only, never deployed)
   pull_request:
     branches: [main]
   workflow_dispatch:       # run it by hand from the Actions tab
@@ -81,3 +81,44 @@ jobs:
             src/*.png
           if-no-files-found: ignore
           retention-days: 14
+
+  # The user portal (portal/): type check, unit + screen tests, production build. Nothing is published.
+  portal:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: bash
+        working-directory: portal
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22          # Vitest 5 needs Node >= 22.12
+          cache: npm
+          cache-dependency-path: portal/package-lock.json
+      - run: npm ci
+      - name: Test
+        run: npm test
+      - name: Type check and build
+        run: npm run build
+
+  # Database migrations + RLS security tests on a throwaway PostgreSQL started inside the job
+  # (embedded-postgres). No Supabase project, no secrets, no network database.
+  database:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: bash
+        working-directory: supabase
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: supabase/package-lock.json
+      - run: npm ci
+      - name: Migrations and RLS tests
+        run: npm test
