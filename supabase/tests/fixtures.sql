@@ -57,3 +57,7 @@ insert into public.invitations (id, group_id, invited_by, contact_hash, child_hi
   ('00000000-0000-4000-d000-000000000301', '00000000-0000-4000-b000-000000000101', '00000000-0000-4000-a000-000000000011', app.email_hash('p2@test.local'), 'שלוש', 'pending', now() + interval '7 days'),
   ('00000000-0000-4000-d000-000000000302', '00000000-0000-4000-b000-000000000101', '00000000-0000-4000-a000-000000000011', app.email_hash('P2@Test.local '), 'שלוש', 'pending', now() - interval '1 day'),
   ('00000000-0000-4000-d000-000000000303', '00000000-0000-4000-b000-000000000101', '00000000-0000-4000-a000-000000000011', app.email_hash('p3@test.local'), 'ארבע', 'pending', now() + interval '7 days');
+
+-- P1 and P2 confirmed their phone (Supabase Auth OTP) → verified parents. P3 did not.
+update auth.users set phone = '+972500000001', phone_confirmed_at = now() where id = '00000000-0000-4000-a000-000000000021';
+update auth.users set phone = '+972500000002', phone_confirmed_at = now() where id = '00000000-0000-4000-a000-000000000022';

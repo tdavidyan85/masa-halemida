@@ -116,9 +116,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24          # the tests import the Edge Functions' .ts files (Node type stripping)
           cache: npm
           cache-dependency-path: supabase/package-lock.json
       - run: npm ci
-      - name: Migrations and RLS tests
+      - name: Migrations, RLS and Edge Function logic tests
         run: npm test

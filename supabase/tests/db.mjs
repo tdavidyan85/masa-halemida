@@ -23,11 +23,15 @@ export async function startDb() {
     ...readdirSync(join(ROOT, 'migrations')).filter(f => f.endsWith('.sql')).sort().map(f => join(ROOT, 'migrations', f)),
     join(ROOT, 'tests/fixtures.sql'),
   ]
+  const stop = async () => { await client.end().catch(() => {}); await server.stop().catch(() => {}); rmSync(dir, { recursive: true, force: true }) }
   for (const f of files) {
     try { await client.query(readFileSync(f, 'utf8')) }
-    catch (e) { throw new Error(`failed applying ${f.replace(ROOT + '/', '')}: ${e.message}`) }
+    catch (e) {
+      await stop()            // a broken migration must not leave a server running (the test run would hang)
+      process.exitCode = 1    // node:test does not count a failed before() hook as a failed test – make the run fail anyway
+      throw new Error(`failed applying ${f.replace(ROOT + '/', '')}: ${e.message}`)
+    }
   }
-  const stop = async () => { await client.end().catch(() => {}); await server.stop().catch(() => {}); rmSync(dir, { recursive: true, force: true }) }
   return { client, stop, applied: files.map(f => f.replace(ROOT + '/', '')) }
 }
 
@@ -50,6 +54,13 @@ function session(client) {
         await client.query(`select set_config('request.jwt.claims', $1, true)`, [JSON.stringify({ sub: userId, role: 'authenticated' })])
         await client.query('set local role authenticated')
       }
+      return s
+    },
+    /** act as the server (Edge Functions use the service role, which bypasses RLS) */
+    async asService() {
+      await client.query('reset role')
+      await client.query(`select set_config('request.jwt.claims', '{"role":"service_role"}', true)`)
+      await client.query('set local role service_role')
       return s
     },
     /** act as the database owner (setup inside a test) */

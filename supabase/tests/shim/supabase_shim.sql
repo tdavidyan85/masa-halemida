@@ -20,6 +20,8 @@ create table if not exists auth.users (
   email text unique,
   raw_user_meta_data jsonb not null default '{}'::jsonb,
   email_confirmed_at timestamptz,
+  phone text,
+  phone_confirmed_at timestamptz,         -- set by Supabase Auth after a phone OTP
   created_at timestamptz not null default now()
 );
 create or replace function auth.jwt() returns jsonb language sql stable as $$

@@ -1,0 +1,23 @@
+# Supabase CLI configuration for LOCAL development (`supabase start`). Not used by any cloud project.
+# Keys not listed here use the CLI defaults. Verify with the installed CLI version before relying on it.
+project_id = "masa-halemida-dev"
+
+[auth]
+site_url = "http://localhost:5173"
+additional_redirect_urls = ["http://localhost:5173", "http://127.0.0.1:5173"]
+minimum_password_length = 8
+enable_signup = true
+
+[auth.email]
+enable_signup = true
+enable_confirmations = true          # adults must confirm their e-mail
+double_confirm_changes = true
+
+[auth.sms]
+enable_signup = false                 # phone is only for verifying parents (OTP), not for signing up
+
+[functions.student-login]
+verify_jwt = false                    # students have no session yet; the function enforces its own limits
+
+[functions.manage-student]
+verify_jwt = true
