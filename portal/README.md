@@ -1,0 +1,48 @@
+# פורטל מסע הלמידה (הדגמה מקומית)
+
+ממשק משתמשים לארבעה תפקידים: מנהל/ת מערכת, מורה, הורה ותלמיד/ה. React + TypeScript + Vite, עברית מלאה מימין לשמאל, מותאם למחשב ולטלפון.
+
+> **⚠️ זו הדגמה בלבד.** כל השמות והתמונות פיקטיביים. **אין התחברות אמיתית ואין הרשאות מאובטחות**: הכללים רצים בדפדפן ואפשר לעקוף אותם. שום דבר לא נשמר בשרת ולא נשלח לשום שירות.
+> מנוע הלמידה הקיים (`src/`, `math/`, `english/`…) לא השתנה. הפורטל רק מקשר אליו.
+
+## הפעלה
+
+```bash
+cd portal
+npm install
+npm run dev          # http://localhost:5173
+```
+
+| פקודה | מה היא עושה |
+|---|---|
+| `npm run dev` | שרת פיתוח עם רענון אוטומטי |
+| `npm test` | בדיקות (Vitest + Testing Library) |
+| `npm run build` | בדיקת טיפוסים ובנייה ל-`dist/` |
+| `npm run preview` | מגיש את `dist/` מקומית |
+
+## חשבונות לדוגמה
+
+| תפקיד | כניסה |
+|---|---|
+| מנהלת מערכת | `admin@demo.local` / `demo1234` |
+| מורה | `michal@demo.local` או `dana@demo.local` / `demo1234` |
+| מורה שממתינה לאישור (נחסמת) | `yael@demo.local` |
+| הורה | `ronit@demo.local` (שני ילדים), `sigal@demo.local`, `omer@demo.local`, `maya@demo.local` / `demo1234` |
+| תלמיד צעיר (תמונה וקוד) | נועם, איתי, אלה · קוד `123456` · אחרי 5 טעויות: נעילה לרבע שעה |
+| תלמיד בוגר | `tamar.levi`, `shira.m`, `yonatan.h`, `lior.katz` / `demo1234` |
+
+## מבנה
+
+```
+src/
+  data/types.ts          טיפוסים שתואמים לטבלאות המתוכננות (profiles, groups, guardianships, consents…)
+  data/source.ts         הממשק היחיד בין המסכים לנתונים (DataSource)
+  data/mockSource.ts     מימוש מקומי עם נתונים פיקטיביים, כולל כללי "מי רואה מה"
+  data/supabaseSource.ts מקום שמור לחיבור העתידי (לא מחובר, נכשל במפורש)
+  data/mockData.ts       הנתונים הפיקטיביים · data/avatar.ts תמונות מצוירות שנוצרות מקומית
+  auth/                  הקשר ההתחברות (הדגמה), שומר מסלולים לפי תפקיד, מגביל ניסיונות
+  components/            מעטפת וניווט, מצבי טעינה, ריק ושגיאה, רכיבי ממשק
+  pages/                 login/ · admin · teacher · parent · student
+```
+
+**המעבר לשרת אמיתי:** מממשים את `DataSource` עם supabase-js ומגדירים `VITE_DATA_SOURCE=supabase`. המסכים לא משתנים. כל כלל שמופיע ב-`mockSource.ts` חייב להיאכף בשרת (RLS ופונקציות Edge), והבדיקות ב-`mockSource.test.ts` הן רשימת המקרים שבדיקות ה-RLS צריכות לכסות.
