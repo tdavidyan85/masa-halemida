@@ -69,18 +69,34 @@ export interface Invitation {
   sentAt: string
 }
 
-export type AssignmentKind = 'practice' | 'exam' | 'reading'
+export type AssignmentKind = 'practice' | 'quiz' | 'reading'
+export type AssignmentStatus = 'draft' | 'published' | 'archived'
+/** the existing learning engine is opened only at one of these paths (same list as the database) */
+export const PLAYER_PATHS = { 'math/': 'חשבון', 'english/': 'אנגלית', 'fractions/': 'שברים' } as const
+export type PlayerPath = keyof typeof PLAYER_PATHS
+
+export interface QuizItem {
+  id?: string
+  position: number
+  prompt: string
+  options: string[]
+  /** present only for the teacher – students never receive answer keys */
+  answerIndex?: number
+}
+
 export interface Assignment {
   id: string
   groupId: string
   title: string
   kind: AssignmentKind
+  status: AssignmentStatus
   dueAt: string
   materialId?: string
-  /** a link into the existing learning engine (opened as is, the engine is not changed) */
-  playPath?: string
+  /** practice: where the existing learning engine opens (allow-listed; the engine itself is not changed) */
+  playPath?: PlayerPath
   /** short text the student can have read aloud */
   instructions: string
+  items?: QuizItem[]
 }
 
 export interface Material {
@@ -93,14 +109,42 @@ export interface Material {
   uploadedAt: string
 }
 
-export type ProgressState = 'not_started' | 'in_progress' | 'done'
+export type ProgressState = 'not_started' | 'in_progress' | 'practiced' | 'completed'
 export interface AssignmentProgress {
   studentId: string
   assignmentId: string
   state: ProgressState
-  /** 0..100, only for finished practice / exams */
-  score?: number
+  /** UNVERIFIED practice telemetry reported by the student's browser */
+  practiceQuestions?: number
+  practiceFirstTry?: number
+  /** VERIFIED: graded by the server against answer keys the student never sees */
+  verifiedScore?: number
+  verifiedMax?: number
+  attempts?: number
+  lastActivityAt?: string
 }
+
+export interface LearningSession {
+  id: string
+  studentId: string
+  assignmentId?: string
+  startedAt: string
+  endedAt?: string
+  questions: number
+  firstTry: number
+}
+
+export interface PracticeEvent {
+  /** client-made id: the server ignores a resent event (idempotent) */
+  id: string
+  kind: 'question' | 'round_done'
+  skill?: string
+  topic?: string
+  ok?: boolean
+  ms?: number
+}
+
+export interface QuizResult { score: number; max: number; attempt: number; attemptsLeft: number; late: boolean }
 
 export interface SubjectProgress {
   studentId: string

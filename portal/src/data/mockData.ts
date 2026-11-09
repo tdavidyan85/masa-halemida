@@ -2,7 +2,7 @@
 // Nothing here is real, nothing is sent anywhere, and the PINs/passwords below exist only for the demo.
 import { sampleAvatar } from './avatar'
 import type {
-  Adult, Assignment, AssignmentProgress, Consent, Group, Guardianship, Invitation, Material, Student, SubjectProgress,
+  Adult, Assignment, AssignmentProgress, Consent, Group, Guardianship, Invitation, LearningSession, Material, Student, SubjectProgress,
 } from './types'
 
 const a = (id: string, role: Adult['role'], fullName: string, email: string, long = false, status: Adult['status'] = 'active'): Adult =>
@@ -83,28 +83,41 @@ export const MATERIALS: Material[] = [
 ]
 
 export const ASSIGNMENTS: Assignment[] = [
-  { id: 'as-1', groupId: 'g-math5', title: 'שברים: חיבור וחיסור', kind: 'practice', dueAt: '2026-11-12', materialId: 'm-1', playPath: 'fractions/',
+  { id: 'as-1', groupId: 'g-math5', title: 'שברים: חיבור וחיסור', kind: 'practice', status: 'published', dueAt: '2026-11-12', materialId: 'm-1', playPath: 'fractions/',
     instructions: 'תרגלו חיבור וחיסור של שברים עם אותו מכנה. אפשר לבקש רמז בכל שאלה.' },
-  { id: 'as-2', groupId: 'g-math5', title: 'מבחן קצר: מספרים גדולים', kind: 'exam', dueAt: '2026-11-15', playPath: 'math/',
-    instructions: 'מבחן של עשר שאלות, בלי טיימר. קראו כל שאלה בשקט, ואפשר ללחוץ על הרמקול כדי לשמוע אותה.' },
-  { id: 'as-3', groupId: 'g-eng', title: 'Pronouns – he, she, it', kind: 'practice', dueAt: '2026-11-11', materialId: 'm-3', playPath: 'english/',
+  { id: 'as-2', groupId: 'g-math5', title: 'מבחן קצר: מספרים גדולים', kind: 'quiz', status: 'published', dueAt: '2026-11-15',
+    instructions: 'שלוש שאלות, בלי שעון. אפשר ללחוץ על הרמקול כדי לשמוע כל שאלה.',
+    items: [
+      { position: 1, prompt: 'איזה מספר גדול יותר?', options: ['45,100', '45,010', '4,510'], answerIndex: 0 },
+      { position: 2, prompt: 'כמה עשרות אלפים יש במספר 63,200?', options: ['3', '6', '2'], answerIndex: 1 },
+      { position: 3, prompt: '10,000 + 2,000 + 30 =', options: ['12,300', '12,030', '1,230'], answerIndex: 1 },
+    ] },
+  { id: 'as-3', groupId: 'g-eng', title: 'Pronouns – he, she, it', kind: 'practice', status: 'published', dueAt: '2026-11-11', materialId: 'm-3', playPath: 'english/',
     instructions: 'בחרו את שם הגוף המתאים לכל משפט. כל מילה באנגלית אפשר לשמוע.' },
-  { id: 'as-4', groupId: 'g-read', title: 'קריאה: קמץ ופתח', kind: 'reading', dueAt: '2026-11-13',
+  { id: 'as-4', groupId: 'g-read', title: 'קריאה: קמץ ופתח', kind: 'reading', status: 'published', dueAt: '2026-11-13',
     instructions: 'הקשיבו למילים וחפשו את האות עם התנועה הנכונה.' },
-  { id: 'as-5', groupId: 'g-math6', title: 'הכנה למבחן: סדר פעולות', kind: 'practice', dueAt: '2026-11-14', playPath: 'math/',
+  { id: 'as-5', groupId: 'g-math6', title: 'הכנה למבחן: סדר פעולות', kind: 'practice', status: 'published', dueAt: '2026-11-14', playPath: 'math/',
     instructions: 'פותרים לפי סדר הפעולות: קודם כפל וחילוק, אחר כך חיבור וחיסור.' },
+  { id: 'as-6', groupId: 'g-math5', title: 'טיוטה: גאומטריה', kind: 'practice', status: 'draft', dueAt: '2026-11-20', playPath: 'math/',
+    instructions: 'עוד לא פורסם לתלמידים.' },
 ]
 
 export const ASSIGNMENT_PROGRESS: AssignmentProgress[] = [
-  { studentId: 's-tamar', assignmentId: 'as-1', state: 'done', score: 90 },
-  { studentId: 's-tamar', assignmentId: 'as-2', state: 'in_progress' },
-  { studentId: 's-tamar', assignmentId: 'as-3', state: 'done', score: 75 },
-  { studentId: 's-lior', assignmentId: 'as-1', state: 'in_progress' },
-  { studentId: 's-yonatan', assignmentId: 'as-3', state: 'done', score: 60 },
-  { studentId: 's-shira', assignmentId: 'as-3', state: 'not_started' },
-  { studentId: 's-shira', assignmentId: 'as-5', state: 'done', score: 95 },
+  { studentId: 's-tamar', assignmentId: 'as-1', state: 'practiced', practiceQuestions: 24, practiceFirstTry: 20 },
+  { studentId: 's-tamar', assignmentId: 'as-2', state: 'completed', verifiedScore: 2, verifiedMax: 3, attempts: 1 },
+  { studentId: 's-tamar', assignmentId: 'as-3', state: 'practiced', practiceQuestions: 16, practiceFirstTry: 12 },
+  { studentId: 's-lior', assignmentId: 'as-1', state: 'in_progress', practiceQuestions: 6, practiceFirstTry: 3 },
+  { studentId: 's-yonatan', assignmentId: 'as-3', state: 'practiced', practiceQuestions: 10, practiceFirstTry: 6 },
+  { studentId: 's-shira', assignmentId: 'as-5', state: 'practiced', practiceQuestions: 30, practiceFirstTry: 28 },
   { studentId: 's-noam', assignmentId: 'as-4', state: 'in_progress' },
-  { studentId: 's-ella', assignmentId: 'as-4', state: 'done', score: 80 },
+  { studentId: 's-ella', assignmentId: 'as-4', state: 'practiced', practiceQuestions: 0, practiceFirstTry: 0 },
+]
+
+export const SESSIONS: LearningSession[] = [
+  { id: 'ls-1', studentId: 's-tamar', assignmentId: 'as-1', startedAt: '2026-11-08T16:10:00Z', endedAt: '2026-11-08T16:25:00Z', questions: 24, firstTry: 20 },
+  { id: 'ls-2', studentId: 's-tamar', assignmentId: 'as-3', startedAt: '2026-11-07T15:00:00Z', endedAt: '2026-11-07T15:12:00Z', questions: 16, firstTry: 12 },
+  { id: 'ls-3', studentId: 's-tamar', startedAt: '2026-11-06T17:30:00Z', endedAt: '2026-11-06T17:40:00Z', questions: 9, firstTry: 7 },
+  { id: 'ls-4', studentId: 's-noam', assignmentId: 'as-4', startedAt: '2026-11-08T14:00:00Z', questions: 0, firstTry: 0 },
 ]
 
 export const SUBJECT_PROGRESS: SubjectProgress[] = [

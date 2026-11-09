@@ -31,7 +31,7 @@ export function fakeSupabase(opts: FakeOptions = {}) {
   let authCb: ((event: string, session: unknown) => void) | null = null
 
   function query(table: string) {
-    const st: { cols: string; filters: ((r: Row) => boolean)[]; insert?: Row; one?: 'single' | 'maybe' } = { cols: '', filters: [] }
+    const st: { cols: string; filters: ((r: Row) => boolean)[]; insert?: Row | Row[]; patch?: Row; del?: boolean; one?: 'single' | 'maybe' } = { cols: '', filters: [] }
     const run = (): Reply => {
       const banned = closed[table as keyof typeof closed] ?? []
       const cols = st.cols.split(',').map(c => c.trim()).filter(Boolean)
@@ -39,8 +39,16 @@ export function fakeSupabase(opts: FakeOptions = {}) {
       if (cols.some(c => banned.includes(c))) return { error: { code: '42501', message: `permission denied for table ${table}` } }
       let rows: Row[]
       if (st.insert) {
-        const row = { id: `new-${(tables[table] ?? []).length + 1}`, created_at: '2026-11-09', archived_at: null, ...st.insert }
-        ;(tables[table] ??= []).push(row); rows = [row]
+        rows = (Array.isArray(st.insert) ? st.insert : [st.insert]).map(x => {
+          const row = { id: `new-${(tables[table] ?? []).length + 1}`, created_at: '2026-11-09', archived_at: null, ...x }
+          ;(tables[table] ??= []).push(row); return row
+        })
+      } else if (st.patch) {
+        rows = (tables[table] ?? []).filter(r => st.filters.every(f => f(r)))
+        rows.forEach(r => Object.assign(r, st.patch))
+      } else if (st.del) {
+        rows = (tables[table] ?? []).filter(r => st.filters.every(f => f(r)))
+        tables[table] = (tables[table] ?? []).filter(r => !rows.includes(r))
       } else rows = (tables[table] ?? []).filter(r => st.filters.every(f => f(r)))
       const pick = (r: Row) => (cols.length ? Object.fromEntries(cols.map(c => [c, r[c]])) : r)
       if (st.one === 'single') return rows.length === 1 ? { data: pick(rows[0]) } : { error: { code: 'PGRST116', message: 'not exactly one row' } }
@@ -49,7 +57,10 @@ export function fakeSupabase(opts: FakeOptions = {}) {
     }
     const b = {
       select(cols = '*') { st.cols = cols; calls.selects.push({ table, cols }); return b },
-      insert(row: Row) { st.insert = row; calls.inserts.push({ table, row }); return b },
+      insert(row: Row | Row[]) { st.insert = row; calls.inserts.push({ table, row: row as Row }); return b },
+      update(patch: Row) { st.patch = patch; calls.inserts.push({ table, row: { update: patch } }); return b },
+      delete() { st.del = true; return b },
+      limit() { return b },
       eq(c: string, v: unknown) { st.filters.push(r => r[c] === v); return b },
       in(c: string, vs: unknown[]) { st.filters.push(r => vs.includes(r[c])); return b },
       order() { return b },

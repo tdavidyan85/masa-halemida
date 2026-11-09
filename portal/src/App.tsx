@@ -15,7 +15,7 @@ import { ForgotPassword, ResetPassword, SignUp } from './pages/login/AccountPage
 import { AdminGroups, AdminHome, AdminTeachers, AdminUsers } from './pages/admin'
 import { GroupDetailPage, TeacherAssignments, TeacherGroups, TeacherHome, TeacherMaterials, TeacherStudents } from './pages/teacher'
 import { ParentApprovals, ParentHome, ParentProgress, ParentSettings } from './pages/parent'
-import { StudentHome, StudentProgress, StudentTasks, StudentTests } from './pages/student'
+import { PlayPage, QuizPage, StudentHome, StudentProgress, StudentTasks, StudentTests } from './pages/student'
 
 export function Providers({ source, session, children }: { source: DataSource; session?: Session | null; children: ReactNode }) {
   return <DataContext.Provider value={source}><AuthProvider initial={session}>{children}</AuthProvider></DataContext.Provider>
@@ -70,6 +70,8 @@ export function AppRoutes() {
         <Route path="tasks" element={<StudentTasks />} />
         <Route path="tests" element={<StudentTests />} />
         <Route path="progress" element={<StudentProgress />} />
+        <Route path="play/:assignmentId" element={<PlayPage />} />
+        <Route path="quiz/:assignmentId" element={<QuizPage />} />
       </Route>
 
       <Route path="*" element={<main className="page-narrow"><ErrorState title="העמוד לא נמצא" message="אולי הקישור ישן." action={{ label: 'לדף הבית', to: '/' }} /></main>} />

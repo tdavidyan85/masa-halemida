@@ -3,6 +3,7 @@ import { ROLE_NAME, useAuth } from '../auth/AuthContext'
 import type { Role } from '../data/types'
 import { Avatar } from './ui'
 import { useData } from '../data'
+import { stashEngineStorage } from '../player/bridge'
 
 export interface NavItem { to: string; label: string; emoji: string; end?: boolean }
 
@@ -64,7 +65,7 @@ export function AppShell({ role }: { role: Role }) {
           <div className="row user-box">
             <Avatar src={session.avatar} name={session.fullName} size={38} />
             <span className="user-name">{session.fullName}</span>
-            <button className="btn btn-ghost" onClick={() => { signOut(); navigate(role === 'student' ? '/login/student' : '/login') }}>יציאה</button>
+            <button className="btn btn-ghost" onClick={() => { if (role === 'student') stashEngineStorage(); signOut(); navigate(role === 'student' ? '/login/student' : '/login') }}>יציאה</button>
           </div>
         )}
       </header>

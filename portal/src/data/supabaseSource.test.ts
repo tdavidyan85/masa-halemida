@@ -195,3 +195,39 @@ describe('errors a user can read', () => {
     expect(other.message).not.toMatch(/secret|student_credentials/)
   })
 })
+
+describe('learning (phase 3)', () => {
+  const quizTables = {
+    ...tables,
+    assignments: [{ id: 'q1', group_id: G, title: 'חידון', instructions: '', kind: 'quiz', player_path: null, status: 'published', due_at: null, created_at: '2026-11-09' }],
+    assignment_items: [{ id: 'it1', assignment_id: 'q1', position: 1, prompt: 'שאלה', options: ['א', 'ב'] }],
+    assignment_answer_keys: [{ item_id: 'it1', answer_index: 1 }],
+    assignment_status: [{ assignment_id: 'q1', student_id: K1, state: 'completed', practice_questions: 0, practice_first_try: 0, verified_score: 1, verified_max: 1, attempts: 1, last_activity_at: null }],
+  }
+  it('a student\'s quiz never asks for the answer keys; a teacher\'s does', async () => {
+    const { src, calls } = make({ tables: quizTables })
+    const kid = await src.assignmentDetail(sess(K1, 'student'), 'q1')
+    expect(kid.items![0].answerIndex).toBeUndefined()
+    expect(calls.selects.some(q => q.table === 'assignment_answer_keys')).toBe(false)
+    const teacher = await src.assignmentDetail(sess(T, 'teacher'), 'q1')
+    expect(teacher.items![0].answerIndex).toBe(1)
+  })
+  it('learning goes through the server functions; the client never sends a score', async () => {
+    const { src, calls } = make({ rpc: { start_session: () => ({ data: 'sess-1' }), record_progress: () => ({ data: 2 }),
+      submit_quiz: () => ({ data: { score: 1, max: 1, attempt: 1, attempts_left: 2, late: false } }) } })
+    const kid = sess(K1, 'student')
+    expect(await src.startSession(kid, 'q1')).toBe('sess-1')
+    await src.recordProgress(kid, 'sess-1', [{ id: 'e1', kind: 'question', ok: true }])
+    expect(await src.submitQuiz(kid, 'q1', [1])).toEqual({ score: 1, max: 1, attempt: 1, attemptsLeft: 2, late: false })
+    expect(calls.rpc.map(c => c.fn)).toEqual(['start_session', 'record_progress', 'submit_quiz'])
+    expect(calls.rpc[2].args).toEqual({ p_assignment: 'q1', p_answers: [1] })
+    expect(JSON.stringify(calls.rpc)).not.toMatch(/score/)
+  })
+  it('creating a quiz writes questions and keys; the group page shows verified status', async () => {
+    const { src, calls } = make({ tables: quizTables })
+    await src.createAssignment(sess(T, 'teacher'), { groupId: G, title: 'חדש', instructions: '', kind: 'quiz', items: [{ position: 1, prompt: 'q', options: ['a', 'b'], answerIndex: 0 }] })
+    expect(calls.inserts.map(i => i.table)).toEqual(['assignments', 'assignment_items', 'assignment_answer_keys'])
+    const d = await src.groupDetail(sess(T, 'teacher'), G)
+    expect(d.progress.find(p => p.assignmentId === 'q1')).toMatchObject({ state: 'completed', verifiedScore: 1, verifiedMax: 1 })
+  })
+})

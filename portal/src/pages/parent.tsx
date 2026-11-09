@@ -3,7 +3,7 @@ import type { FormEvent } from 'react'
 import { Link } from 'react-router'
 import { useSession } from '../auth/AuthContext'
 import { AsyncView, EmptyState } from '../components/States'
-import { Avatar, Badge, Card, KIND_TEXT, PageHeader, PersonChip, ProgressBadge, ProgressBar, formatDate } from '../components/ui'
+import { Avatar, Badge, Card, KIND_TEXT, PageHeader, PersonChip, ProgressBadge, ProgressBar, formatDate, isDone } from '../components/ui'
 import { useData } from '../data'
 import { GRADES, SUBJECTS } from '../data/types'
 import type { Grade } from '../data/types'
@@ -74,7 +74,7 @@ function AddChildForm({ onDone }: { onDone(): void }) {
 }
 
 function ChildCard({ k }: { k: ChildOverview }) {
-  const open = k.assignments.filter(a => a.progress?.state !== 'done')
+  const open = k.assignments.filter(a => !isDone(a.progress))
   return (
     <Card className="child-card">
       <div className="child-head">
@@ -178,10 +178,26 @@ export function ParentProgress() {
                 </div>
               ))}</div>
             )}
-            {k.assignments.length > 0 && (
-              <ul className="list">{k.assignments.map(a => (
-                <li key={a.id} className="list-row"><span>{KIND_TEXT[a.kind].emoji} {a.title}</span><ProgressBadge state={a.progress?.state} score={a.progress?.score} /></li>
-              ))}</ul>
+            <h3>משימות</h3>
+            {k.assignments.length === 0 ? <p className="muted">אין משימות כרגע.</p> : (
+              <>
+                <p className="legend"><span><b>ציון</b>: מבחן שנבדק בשרת</span><span><b>תרגול</b>: דיווח מהתרגול, לא ציון</span></p>
+                <ul className="list">{k.assignments.map(a => (
+                  <li key={a.id} className="list-row"><span>{KIND_TEXT[a.kind].emoji} {a.title}{a.dueAt ? <small className="muted"> · עד {formatDate(a.dueAt)}</small> : null}</span><ProgressBadge progress={a.progress} /></li>
+                ))}</ul>
+              </>
+            )}
+            <h3 style={{ marginTop: 14 }}>היסטוריית למידה</h3>
+            {k.sessions.length === 0 ? <p className="muted">עוד לא היו שיעורים.</p> : (
+              <ul className="history">{k.sessions.map(x => {
+                const a = k.assignments.find(y => y.id === x.assignmentId)
+                return (
+                  <li key={x.id}>
+                    <span>{new Date(x.startedAt).toLocaleDateString('he-IL', { day: 'numeric', month: 'long' })} · {a ? a.title : 'תרגול חופשי'}</span>
+                    <span className="small muted">{x.questions} שאלות{x.questions ? `, ${Math.round((x.firstTry / x.questions) * 100)}% מהפעם הראשונה` : ''} (תרגול)</span>
+                  </li>
+                )
+              })}</ul>
             )}
           </Card>
         ))}

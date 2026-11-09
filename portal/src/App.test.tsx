@@ -135,7 +135,9 @@ describe('screens', () => {
     const table = await screen.findByRole('table')
     expect(within(table).getByText('תמר לוי')).toBeInTheDocument()
     expect(within(table).getByText('ליאור כץ')).toBeInTheDocument()
-    expect(within(table).getAllByText(/הושלם/).length).toBeGreaterThan(0)
+    expect(within(table).getByText(/2\/3/)).toBeInTheDocument()                      // verified quiz result
+    expect(within(table).getAllByText('תרגול').length).toBeGreaterThan(0)            // practice is labelled as practice
+    expect(within(table).queryByText(/טיוטה: גאומטריה/)).not.toBeInTheDocument()     // drafts are not in the progress table
   })
 
   it('teacher: creates a new group', async () => {
@@ -267,5 +269,60 @@ describe('server mode (fake Supabase client)', () => {
     act(() => f.emit('PASSWORD_RECOVERY', { id: 'u1' }))
     expect(await screen.findByRole('heading', { name: 'בחירת סיסמה חדשה' })).toBeInTheDocument()
     expect(await screen.findByLabelText('סיסמה חדשה')).toBeInTheDocument()
+  })
+})
+
+describe('learning workflow (demo data source)', () => {
+  it('teacher → quiz → publish; student takes it; teacher and parent see the VERIFIED result', async () => {
+    const source = new MockSource({ delayMs: 0 })
+    const user = userEvent.setup()
+    const view = (path: string, who: string) => render(<Providers source={source} session={sessionFor(who)}><MemoryRouter initialEntries={[path]}><AppRoutes /></MemoryRouter></Providers>)
+    let r = view('/teacher/assignments', 'u-t1')
+    await user.click(await screen.findByRole('button', { name: '+ משימה חדשה' }))
+    await user.selectOptions(screen.getByLabelText('סוג'), 'quiz')
+    await user.type(screen.getByLabelText('כותרת'), 'חידון שברים')
+    await user.type(screen.getByLabelText('ניסוח שאלה 1'), 'כמה זה חצי ועוד חצי?')
+    await user.type(screen.getByLabelText('שאלה 1 תשובה 1'), '1')
+    await user.type(screen.getByLabelText('שאלה 1 תשובה 2'), '2')
+    await user.click(screen.getByRole('button', { name: 'שמירה כטיוטה' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('סימון התשובה הנכונה')          // no key → not saved
+    await user.click(screen.getByLabelText('תשובה 1 נכונה'))
+    await user.click(screen.getByRole('button', { name: 'שמירה כטיוטה' }))
+    const card = (await screen.findByRole('heading', { name: /חידון שברים/ })).closest('section')!
+    expect(within(card).getByText('טיוטה')).toBeInTheDocument()
+    await user.click(within(card).getByRole('button', { name: 'פרסום' }))
+    expect(await screen.findByText(/פורסם לקבוצה/)).toBeInTheDocument()
+    r.unmount()
+
+    r = view('/student/tests', 's-tamar')
+    const quizCard = (await screen.findByRole('heading', { name: 'חידון שברים' })).closest('article')!
+    await user.click(within(quizCard).getByRole('link', { name: /למבחן/ }))
+    await user.click(await screen.findByRole('radio', { name: '1' }))
+    await user.click(screen.getByRole('button', { name: 'הגשה' }))
+    expect(await screen.findByText('1/1')).toBeInTheDocument()
+    r.unmount()
+
+    r = view('/parent/progress', 'u-p1')
+    const tamar = (await screen.findByRole('heading', { name: 'תמר לוי' })).closest('section')!
+    const row = within(tamar).getByText(/חידון שברים/).closest('li')!
+    expect(within(row).getByText(/1\/1/)).toBeInTheDocument()
+    expect(within(tamar).getByRole('heading', { name: 'היסטוריית למידה' })).toBeInTheDocument()
+    r.unmount()
+  })
+  it('students never see drafts, and a published quiz reaches the student without answer keys', async () => {
+    const source = new MockSource({ delayMs: 0 })
+    const tasks = await source.myTasks(sessionFor('s-tamar'))
+    expect(tasks.map(t => t.title)).not.toContain('טיוטה: גאומטריה')
+    const quiz = await source.assignmentDetail(sessionFor('s-tamar'), 'as-2')
+    expect(quiz.items!.every(it => it.answerIndex === undefined)).toBe(true)
+    const forTeacher = await source.assignmentDetail(sessionFor('u-t1'), 'as-2')
+    expect(forTeacher.items!.every(it => typeof it.answerIndex === 'number')).toBe(true)
+  })
+  it('the practice player embeds the existing engine from the portal\'s own origin, with no token in the URL', async () => {
+    renderAt('/student/play/as-1', sessionFor('s-tamar'))
+    const frame = await screen.findByTitle('תרגול: שברים: חיבור וחיסור')
+    expect(frame).toHaveAttribute('src', 'play/fractions/')
+    expect(frame.getAttribute('src')).not.toMatch(/token|session|key|#|\?/)
+    expect(screen.getByRole('status')).toHaveTextContent(/נשמרו 0 תשובות/)
   })
 })

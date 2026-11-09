@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { useSpeech } from '../hooks/useSpeech'
-import type { AssignmentKind, ProgressState } from '../data/types'
+import type { AssignmentKind, AssignmentProgress } from '../data/types'
 
 export function Avatar({ src, name, size = 44 }: { src: string; name: string; size?: number }) {
   return <img className="avatar" src={src} alt={`תמונת פרופיל לדוגמה של ${name}`} width={size} height={size} />
@@ -58,16 +58,25 @@ export function ProgressBar({ value, label }: { value: number; label: string }) 
   )
 }
 
-const STATE_TEXT: Record<ProgressState, [string, 'neutral' | 'info' | 'good']> = {
-  not_started: ['עוד לא התחיל', 'neutral'], in_progress: ['בתהליך', 'info'], done: ['הושלם', 'good'],
+/**
+ * Progress on one assignment. A VERIFIED result (graded by the server) is shown as a score;
+ * practice reported by the browser is always labelled as practice, never as a grade.
+ */
+export function ProgressBadge({ progress }: { progress?: AssignmentProgress }) {
+  const st = progress?.state ?? 'not_started'
+  if (st === 'completed' && progress?.verifiedMax) {
+    return <Badge tone="good">✓ {progress.verifiedScore ?? 0}/{progress.verifiedMax} <span className="badge-note">ציון</span></Badge>
+  }
+  if (st === 'practiced' || (st === 'in_progress' && (progress?.practiceQuestions ?? 0) > 0)) {
+    return <Badge tone="info">{st === 'practiced' ? 'תרגל/ה' : 'בתהליך'} · {progress?.practiceQuestions ?? 0} שאלות <span className="badge-note" title="דיווח מהתרגול, לא ציון שנבדק בשרת">תרגול</span></Badge>
+  }
+  if (st === 'in_progress') return <Badge tone="info">בתהליך</Badge>
+  return <Badge>עוד לא התחיל</Badge>
 }
-export function ProgressBadge({ state = 'not_started', score }: { state?: ProgressState; score?: number }) {
-  const [text, tone] = STATE_TEXT[state]
-  return <Badge tone={tone}>{text}{state === 'done' && score !== undefined ? ` · ${score}` : ''}</Badge>
-}
+export const isDone = (p?: AssignmentProgress) => p?.state === 'completed' || p?.state === 'practiced'
 
 export const KIND_TEXT: Record<AssignmentKind, { name: string; emoji: string }> = {
-  practice: { name: 'תרגול', emoji: '✏️' }, exam: { name: 'מבחן', emoji: '📝' }, reading: { name: 'קריאה', emoji: '📖' },
+  practice: { name: 'תרגול', emoji: '✏️' }, quiz: { name: 'מבחן', emoji: '📝' }, reading: { name: 'קריאה', emoji: '📖' },
 }
 
 /** read a text aloud with the device's voice (big, friendly button for young children) */

@@ -3,8 +3,8 @@
 import * as D from './mockData'
 import { AttemptLimiter } from '../auth/attemptLimiter'
 import { DemoOnlyError, ForbiddenError, LoginError } from './source'
-import type { ChildOverview, DataSource, GroupDetail, NewChildInput, PinProfile, SessionEvent, SignUpInput, StudentTask } from './source'
-import type { Adult, Group, Invitation, Role, Session, Student } from './types'
+import type { AssignmentInput, ChildOverview, DataSource, GroupDetail, NewChildInput, PinProfile, SessionEvent, SignUpInput, StudentTask } from './source'
+import type { Adult, Assignment, Group, Invitation, LearningSession, PracticeEvent, QuizResult, Role, Session, Student } from './types'
 
 export interface MockOptions { delayMs?: number; failWith?: string }
 
@@ -25,6 +25,9 @@ export class MockSource implements DataSource {
   private assignments = clone(D.ASSIGNMENTS)
   private progress = clone(D.ASSIGNMENT_PROGRESS)
   private subjects = clone(D.SUBJECT_PROGRESS)
+  private sessions = clone(D.SESSIONS)
+  private eventIds = new Set<string>()
+  private attempts = new Map<string, number>()
   readonly limiter = new AttemptLimiter()
   private listeners = new Set<(s: Session | null, e: SessionEvent) => void>()
 
@@ -174,9 +177,10 @@ export class MockSource implements DataSource {
       return {
         student, relation: gs.relation, groups,
         subjects: this.subjects.filter(x => x.studentId === student.id),
-        assignments: this.assignments.filter(a => groups.some(g => g.id === a.groupId))
-          .map(a => ({ ...a, progress: this.progress.find(p => p.assignmentId === a.id && p.studentId === student.id) })),
+        assignments: this.assignments.filter(a => a.status === 'published' && groups.some(g => g.id === a.groupId))
+          .map(a => ({ ...this.forViewer(a, false), progress: this.progress.find(p => p.assignmentId === a.id && p.studentId === student.id) })),
         consents: this.consents.filter(c => c.studentId === student.id),
+        sessions: this.sessions.filter(x => x.studentId === student.id).sort((a, b) => b.startedAt.localeCompare(a.startedAt)).slice(0, 20),
       }
     }))
   }
@@ -212,10 +216,127 @@ export class MockSource implements DataSource {
   async myTasks(s: Session): Promise<StudentTask[]> {
     this.need(s, 'student')
     const groups = this.groups.filter(g => g.studentIds.includes(s.userId) && !g.archived)
-    return this.wait(this.assignments.filter(a => groups.some(g => g.id === a.groupId)).map(a => ({
-      ...a, group: groups.find(g => g.id === a.groupId)!,
+    return this.wait(this.assignments.filter(a => a.status === 'published' && groups.some(g => g.id === a.groupId)).map(a => ({
+      ...this.forViewer(a, false), group: groups.find(g => g.id === a.groupId)!,
       progress: this.progress.find(p => p.assignmentId === a.id && p.studentId === s.userId),
     })))
   }
   async myProgress(s: Session) { this.need(s, 'student'); return this.wait(this.subjects.filter(x => x.studentId === s.userId)) }
+
+  // ---------- assignments (teacher) ----------
+  /** students and parents never receive answer keys */
+  private forViewer(a: Assignment, withKeys: boolean): Assignment {
+    return { ...a, items: a.items?.map(it => (withKeys ? { ...it } : { position: it.position, prompt: it.prompt, options: [...it.options] })) }
+  }
+  private ownAssignment(s: Session, id: string) {
+    const a = this.assignments.find(x => x.id === id)
+    if (!a || !this.teaches(s, this.group(a.groupId))) throw new ForbiddenError('המשימה הזאת לא שלך')
+    return a
+  }
+  private checkInput(input: AssignmentInput) {
+    if (!input.title.trim()) throw new Error('צריך כותרת למשימה')
+    if (input.kind === 'practice' && !input.playPath) throw new Error('צריך לבחור במה מתרגלים')
+  }
+  async createAssignment(s: Session, input: AssignmentInput) {
+    this.need(s, 'teacher')
+    if (!this.teaches(s, this.group(input.groupId))) throw new ForbiddenError('הקבוצה הזאת לא שלך')
+    this.checkInput(input)
+    const a: Assignment = { id: 'as-' + Math.random().toString(36).slice(2, 8), groupId: input.groupId, title: input.title.trim(), kind: input.kind,
+      status: 'draft', dueAt: input.dueAt ?? '', instructions: input.instructions, playPath: input.kind === 'practice' ? input.playPath : undefined,
+      items: input.kind === 'quiz' ? (input.items ?? []).map((it, i) => ({ ...it, position: i + 1 })) : undefined }
+    this.assignments.push(a)
+    return this.wait(a)
+  }
+  async updateAssignment(s: Session, id: string, input: AssignmentInput) {
+    this.need(s, 'teacher')
+    const a = this.ownAssignment(s, id)
+    if (a.status !== 'draft') throw new Error('אפשר לערוך רק טיוטה. משימה שפורסמה נשארת כמו שהיא')
+    this.checkInput(input)
+    Object.assign(a, { title: input.title.trim(), instructions: input.instructions, kind: input.kind, dueAt: input.dueAt ?? '',
+      playPath: input.kind === 'practice' ? input.playPath : undefined,
+      items: input.kind === 'quiz' ? (input.items ?? []).map((it, i) => ({ ...it, position: i + 1 })) : undefined })
+    return this.wait(a)
+  }
+  async publishAssignment(s: Session, id: string) {
+    this.need(s, 'teacher')
+    const a = this.ownAssignment(s, id)
+    if (a.status !== 'draft') throw new Error('אפשר לפרסם רק טיוטה')
+    if (a.kind === 'quiz' && (!a.items?.length || a.items.some(it => it.answerIndex === undefined || it.answerIndex >= it.options.length))) {
+      throw new Error('לכל שאלה במבחן צריך תשובה נכונה')
+    }
+    a.status = 'published'
+    await this.wait(null)
+  }
+  async archiveAssignment(s: Session, id: string) { this.need(s, 'teacher'); this.ownAssignment(s, id).status = 'archived'; await this.wait(null) }
+  async assignmentDetail(s: Session, id: string) {
+    const a = this.assignments.find(x => x.id === id)
+    if (!a) throw new ForbiddenError('המשימה לא נמצאה')
+    const g = this.group(a.groupId)
+    const teacher = s.role === 'teacher' && this.teaches(s, g)
+    const visible = teacher || s.role === 'admin' || (a.status === 'published' && (
+      (s.role === 'student' && g.studentIds.includes(s.userId)) || (s.role === 'parent' && this.childrenOf(s.userId).some(c => g.studentIds.includes(c.studentId)))))
+    if (!visible) throw new ForbiddenError('המשימה לא נמצאה או שאין לך גישה אליה')
+    return this.wait({ ...this.forViewer(a, teacher), group: g })
+  }
+
+  // ---------- learning (student) – practice is unverified; the quiz is graded here, like on the server ----------
+  private studentAssignment(s: Session, id: string | null) {
+    this.need(s, 'student')
+    if (id === null) return null
+    const a = this.assignments.find(x => x.id === id)
+    if (!a || a.status !== 'published' || !this.group(a.groupId).studentIds.includes(s.userId)) throw new ForbiddenError('המשימה לא זמינה')
+    return a
+  }
+  private statusOf(studentId: string, assignmentId: string) {
+    let p = this.progress.find(x => x.studentId === studentId && x.assignmentId === assignmentId)
+    if (!p) { p = { studentId, assignmentId, state: 'in_progress', practiceQuestions: 0, practiceFirstTry: 0, attempts: 0 }; this.progress.push(p) }
+    return p
+  }
+  async startSession(s: Session, assignmentId: string | null) {
+    const a = this.studentAssignment(s, assignmentId)
+    const sess: LearningSession = { id: 'ls-' + Math.random().toString(36).slice(2, 10), studentId: s.userId, assignmentId: a?.id, startedAt: new Date().toISOString(), questions: 0, firstTry: 0 }
+    this.sessions.push(sess)
+    if (a) this.statusOf(s.userId, a.id)
+    return this.wait(sess.id)
+  }
+  async recordProgress(s: Session, sessionId: string, events: PracticeEvent[]) {
+    this.need(s, 'student')
+    const sess = this.sessions.find(x => x.id === sessionId && x.studentId === s.userId)
+    if (!sess) throw new ForbiddenError('השיעור לא נמצא')
+    if (events.length < 1 || events.length > 50) throw new Error('send 1–50 events')
+    if (sess.assignmentId) this.studentAssignment(s, sess.assignmentId)
+    let n = 0
+    for (const e of events) {
+      if (this.eventIds.has(e.id)) continue
+      this.eventIds.add(e.id); n++
+      if (e.kind === 'question') { sess.questions++; if (e.ok) sess.firstTry++ }
+      if (sess.assignmentId) {
+        const p = this.statusOf(s.userId, sess.assignmentId)
+        if (e.kind === 'question') { p.practiceQuestions = (p.practiceQuestions ?? 0) + 1; if (e.ok) p.practiceFirstTry = (p.practiceFirstTry ?? 0) + 1 }
+        if (e.kind === 'round_done' && p.state !== 'completed') p.state = 'practiced'
+        p.lastActivityAt = new Date().toISOString()
+      }
+    }
+    return this.wait(n)
+  }
+  async finishSession(s: Session, sessionId: string) {
+    this.need(s, 'student')
+    const sess = this.sessions.find(x => x.id === sessionId && x.studentId === s.userId)
+    if (!sess) throw new ForbiddenError('השיעור לא נמצא')
+    sess.endedAt ??= new Date().toISOString()
+    await this.wait(null)
+  }
+  async submitQuiz(s: Session, assignmentId: string, answers: number[]): Promise<QuizResult> {
+    const a = this.studentAssignment(s, assignmentId)!
+    if (a.kind !== 'quiz' || !a.items) throw new Error('זה לא מבחן')
+    if (answers.length !== a.items.length) throw new Error('צריך לענות על כל השאלות')
+    const key = `${assignmentId}:${s.userId}`
+    const tries = this.attempts.get(key) ?? 0
+    if (tries >= 3) throw new Error('נגמרו הניסיונות')
+    this.attempts.set(key, tries + 1)
+    const score = a.items.filter((it, i) => answers[i] === it.answerIndex).length
+    const p = this.statusOf(s.userId, assignmentId)
+    Object.assign(p, { state: 'completed', verifiedScore: Math.max(p.verifiedScore ?? 0, score), verifiedMax: a.items.length, attempts: (p.attempts ?? 0) + 1 })
+    return this.wait({ score, max: a.items.length, attempt: tries + 1, attemptsLeft: 2 - tries, late: !!a.dueAt && a.dueAt < new Date().toISOString().slice(0, 10) })
+  }
 }

@@ -12,8 +12,8 @@ import { createClient } from '@supabase/supabase-js'
 import type { SupabaseClient, User } from '@supabase/supabase-js'
 import { sampleAvatar } from './avatar'
 import { ForbiddenError, LoginError, ServerError } from './source'
-import type { ChildOverview, DataSource, GroupDetail, NewChildInput, PinProfile, SessionEvent, SignUpInput, StudentTask } from './source'
-import type { Adult, Assignment, Consent, Grade, Group, Invitation, Material, Role, Session, Student, SubjectId, SubjectProgress } from './types'
+import type { AssignmentInput, ChildOverview, DataSource, GroupDetail, NewChildInput, PinProfile, SessionEvent, SignUpInput, StudentTask } from './source'
+import type { Adult, Assignment, AssignmentProgress, Consent, Grade, Group, Invitation, LearningSession, Material, PracticeEvent, QuizItem, QuizResult, Role, Session, Student, SubjectId, SubjectProgress } from './types'
 import type { DataConfig } from './config'
 
 type ServerConfig = Extract<DataConfig, { mode: 'server' }>
@@ -42,6 +42,38 @@ function saveDeviceToken(studentId: string, token: string) {
 }
 
 type Row = Record<string, unknown>
+const ASSIGNMENT_COLS = 'id, group_id, title, instructions, kind, player_path, status, due_at'
+const STATUS_COLS = 'assignment_id, student_id, state, practice_questions, practice_first_try, verified_score, verified_max, attempts, last_activity_at'
+/** readable names for the engine's topic codes (unknown codes are shown as they are) */
+const TOPIC_NAMES: Record<string, string> = { num: 'מספרים גדולים', ops: 'כפל וסדר פעולות', prime: 'גורמים ראשוניים', frac: 'שברים',
+  word: 'בעיות מילוליות', geo: 'גאומטריה', dec: 'מספרים עשרוניים', pro: 'שמות גוף', repl: 'השלמת משפטים', write: 'כתיבה' }
+const toAssignment = (r: Row): Assignment => ({ id: String(r.id), groupId: String(r.group_id), title: String(r.title), instructions: String(r.instructions ?? ''),
+  kind: r.kind as Assignment['kind'], status: r.status as Assignment['status'], dueAt: (r.due_at as string | null) ?? '', playPath: (r.player_path as Assignment['playPath']) ?? undefined })
+const toProgress = (r: Row): AssignmentProgress => ({ studentId: String(r.student_id), assignmentId: String(r.assignment_id), state: r.state as AssignmentProgress['state'],
+  practiceQuestions: Number(r.practice_questions ?? 0), practiceFirstTry: Number(r.practice_first_try ?? 0),
+  verifiedScore: r.verified_score == null ? undefined : Number(r.verified_score), verifiedMax: r.verified_max == null ? undefined : Number(r.verified_max),
+  attempts: Number(r.attempts ?? 0), lastActivityAt: (r.last_activity_at as string | null) ?? undefined })
+
+/** practice telemetry → per-subject summary (UNVERIFIED practice, shown as such) */
+function summarize(studentId: string, events: Row[], subjectOfAssignment: (id: string | null) => SubjectId | null): SubjectProgress[] {
+  const by = new Map<SubjectId, { q: number; f: number; days: Set<string>; topics: Map<string, [number, number]> }>()
+  for (const e of events) {
+    if (e.kind !== 'question') continue
+    const subj = subjectOfAssignment((e.assignment_id as string | null) ?? null)
+    if (!subj) continue
+    const x = by.get(subj) ?? { q: 0, f: 0, days: new Set(), topics: new Map() }
+    x.q++; if (e.correct_first) x.f++
+    x.days.add(String(e.at).slice(0, 10))
+    const t = String(e.topic ?? ''); if (t) { const c = x.topics.get(t) ?? [0, 0]; c[0]++; if (e.correct_first) c[1]++; x.topics.set(t, c) }
+    by.set(subj, x)
+  }
+  return [...by].map(([subject, x]) => {
+    const tp = [...x.topics].filter(([, c]) => c[0] >= 3)
+    return { studentId, subject, questions: x.q, firstTry: x.q ? Math.round((x.f / x.q) * 100) : 0, daysActive: x.days.size,
+      strong: tp.filter(([, c]) => c[1] / c[0] >= 0.8).map(([t]) => TOPIC_NAMES[t] ?? t),
+      needsWork: tp.filter(([, c]) => c[1] / c[0] < 0.6).map(([t]) => TOPIC_NAMES[t] ?? t) }
+  })
+}
 const subjectOf = (s: unknown): SubjectId => (['math', 'english', 'hebrew', 'science'].includes(String(s)) ? s as SubjectId : 'math')
 
 export class SupabaseSource implements DataSource {
@@ -265,7 +297,7 @@ export class SupabaseSource implements DataSource {
       group,
       teachers: group.teacherIds.map(id => ({ id, role: 'teacher', fullName: String(people.get(id)?.full_name ?? ''), email: '', status: 'active', avatar: sampleAvatar(id) } as Adult)),
       students: studentRows.map(r => this.student(String(r.id), r, people.get(String(r.id)))),
-      assignments: [], progress: [],          // assignments are not in the database yet
+      ...(await this.assignmentsWithStatus([group.id])),
     }
   }
   async myStudents(s: Session) {
@@ -273,7 +305,19 @@ export class SupabaseSource implements DataSource {
     const students = await this.listStudents()
     return students.filter(x => groups.some(g => g.studentIds.includes(x.id))).map(x => ({ ...x, groups: groups.filter(g => g.studentIds.includes(x.id)) }))
   }
-  async myAssignments(): Promise<(Assignment & { group: Group })[]> { return [] }   // not in the database yet
+  /** assignments of the given groups (RLS: teachers see drafts; students/parents only published) + visible statuses */
+  private async assignmentsWithStatus(groupIds: string[]): Promise<{ assignments: Assignment[]; progress: AssignmentProgress[] }> {
+    if (!groupIds.length) return { assignments: [], progress: [] }
+    const rows = check(await this.sb.from('assignments').select(ASSIGNMENT_COLS).in('group_id', groupIds).order('created_at')) as Row[]
+    const ids = rows.map(r => String(r.id))
+    const st = ids.length ? check(await this.sb.from('assignment_status').select(STATUS_COLS).in('assignment_id', ids)) as Row[] : []
+    return { assignments: rows.map(toAssignment), progress: st.map(toProgress) }
+  }
+  async myAssignments(s: Session): Promise<(Assignment & { group: Group })[]> {
+    const groups = await this.myGroups(s)
+    const { assignments } = await this.assignmentsWithStatus(groups.map(g => g.id))
+    return assignments.map(a => ({ ...a, group: groups.find(g => g.id === a.groupId)! }))
+  }
   async myMaterials(s: Session): Promise<Material[]> {
     const rows = check(await this.sb.from('learning_materials').select('id, title, storage_path, status, created_at').eq('owner_id', s.userId)) as Row[]
     return rows.map(r => ({ id: String(r.id), ownerId: s.userId, title: String(r.title), fileName: String(r.storage_path ?? '').split('/').pop() ?? '',
@@ -312,13 +356,25 @@ export class SupabaseSource implements DataSource {
       this.visibleGroups(),
       this.sb.from('consents').select('id, student_id, guardian_id, scope, group_id, granted_at, revoked_at').in('student_id', ids).then(check) as Promise<Row[]>,
     ])
+    const work = await this.assignmentsWithStatus(groups.map(g => g.id))
+    const subjectOf = (aid: string | null): SubjectId | null => { const a = work.assignments.find(x => x.id === aid); return a ? groups.find(g => g.id === a.groupId)?.subject ?? null : null }
+    const events = check(await this.sb.from('progress_events').select('student_id, session_id, assignment_id, kind, correct_first, topic, at').in('student_id', ids).order('at', { ascending: false }).limit(3000)) as Row[]
+    const sessRows = check(await this.sb.from('learning_sessions').select('id, student_id, assignment_id, started_at, ended_at').in('student_id', ids).order('started_at', { ascending: false }).limit(60)) as Row[]
+    const sessions: LearningSession[] = sessRows.map(r => {
+      const ev = events.filter(e => e.session_id === r.id && e.kind === 'question')
+      return { id: String(r.id), studentId: String(r.student_id), assignmentId: (r.assignment_id as string | null) ?? undefined, startedAt: String(r.started_at),
+        endedAt: (r.ended_at as string | null) ?? undefined, questions: ev.length, firstTry: ev.filter(e => e.correct_first).length }
+    })
     return links.map(l => {
       const id = String(l.student_id)
       return {
         student: this.student(id, students.find(x => x.id === id), people.get(id)),
         relation: l.relation as ChildOverview['relation'],
         groups: groups.filter(g => g.studentIds.includes(id) && !g.archived),
-        subjects: [] as SubjectProgress[], assignments: [],            // progress is not in the database yet
+        subjects: summarize(id, events.filter(e => e.student_id === id), aid => subjectOf(aid)),
+        assignments: work.assignments.filter(a => a.status === 'published' && groups.some(g => g.id === a.groupId && g.studentIds.includes(id)))
+          .map(a => ({ ...a, progress: work.progress.find(p => p.assignmentId === a.id && p.studentId === id) })),
+        sessions: sessions.filter(x => x.studentId === id),
         consents: consents.filter(c => c.student_id === id).map(c => ({ id: String(c.id), studentId: id, parentId: String(c.guardian_id),
           scope: c.scope as Consent['scope'], groupId: (c.group_id as string | null) ?? undefined, grantedAt: String(c.granted_at).slice(0, 10),
           revokedAt: c.revoked_at ? String(c.revoked_at).slice(0, 10) : undefined })),
@@ -344,8 +400,71 @@ export class SupabaseSource implements DataSource {
   }
 
   // ================= student (assignments and progress are not in the database yet) =================
-  async myTasks(): Promise<StudentTask[]> { return [] }
-  async myProgress(): Promise<SubjectProgress[]> { return [] }
+  async myTasks(s: Session): Promise<StudentTask[]> {
+    const groups = (await this.visibleGroups()).filter(g => !g.archived)
+    const { assignments, progress } = await this.assignmentsWithStatus(groups.map(g => g.id))
+    return assignments.filter(a => a.status === 'published').map(a => ({ ...a, group: groups.find(g => g.id === a.groupId)!,
+      progress: progress.find(p => p.assignmentId === a.id && p.studentId === s.userId) }))
+  }
+  async myProgress(s: Session): Promise<SubjectProgress[]> {
+    const groups = await this.visibleGroups()
+    const { assignments } = await this.assignmentsWithStatus(groups.map(g => g.id))
+    const events = check(await this.sb.from('progress_events').select('assignment_id, kind, correct_first, topic, at').eq('student_id', s.userId).order('at', { ascending: false }).limit(3000)) as Row[]
+    return summarize(s.userId, events, aid => { const a = assignments.find(x => x.id === aid); return a ? groups.find(g => g.id === a.groupId)?.subject ?? null : null })
+  }
+  async startSession(_s: Session, assignmentId: string | null) {
+    return check(await this.sb.rpc('start_session', { p_assignment: assignmentId })) as string
+  }
+  async recordProgress(_s: Session, sessionId: string, events: PracticeEvent[]) {
+    return check(await this.sb.rpc('record_progress', { p_session: sessionId, p_events: events })) as number
+  }
+  async finishSession(_s: Session, sessionId: string) { check(await this.sb.rpc('finish_session', { p_session: sessionId })) }
+  async submitQuiz(_s: Session, assignmentId: string, answers: number[]): Promise<QuizResult> {
+    const r = check(await this.sb.rpc('submit_quiz', { p_assignment: assignmentId, p_answers: answers })) as { score: number; max: number; attempt: number; attempts_left: number; late: boolean }
+    return { score: r.score, max: r.max, attempt: r.attempt, attemptsLeft: r.attempts_left, late: r.late }
+  }
+
+  // ================= teacher: assignments =================
+  private async writeItems(assignmentId: string, items: QuizItem[] | undefined) {
+    if (!items?.length) return
+    const rows = check(await this.sb.from('assignment_items').insert(items.map((it, i) => ({ assignment_id: assignmentId, position: i + 1, prompt: it.prompt, options: it.options })))
+      .select('id, position')) as Row[]
+    const keys = rows.map(r => ({ item_id: String(r.id), answer_index: items[Number(r.position) - 1].answerIndex }))
+    check(await this.sb.from('assignment_answer_keys').insert(keys))
+  }
+  async createAssignment(_s: Session, input: AssignmentInput): Promise<Assignment> {
+    const row = check(await this.sb.from('assignments').insert({ group_id: input.groupId, title: input.title.trim(), instructions: input.instructions, kind: input.kind,
+      player_path: input.kind === 'practice' ? input.playPath : null, due_at: input.dueAt || null }).select(ASSIGNMENT_COLS).single()) as Row
+    if (input.kind === 'quiz') await this.writeItems(String(row.id), input.items)
+    return toAssignment(row)
+  }
+  async updateAssignment(_s: Session, id: string, input: AssignmentInput): Promise<Assignment> {
+    const rows = check(await this.sb.from('assignments').update({ title: input.title.trim(), instructions: input.instructions, kind: input.kind,
+      player_path: input.kind === 'practice' ? input.playPath : null, due_at: input.dueAt || null }).eq('id', id).select(ASSIGNMENT_COLS)) as Row[]
+    if (!rows.length) throw new ForbiddenError('אפשר לערוך רק טיוטה שלך')
+    check(await this.sb.from('assignment_items').delete().eq('assignment_id', id))
+    if (input.kind === 'quiz') await this.writeItems(id, input.items)
+    return toAssignment(rows[0])
+  }
+  async publishAssignment(_s: Session, id: string) { check(await this.sb.rpc('publish_assignment', { p_assignment: id })) }
+  async archiveAssignment(_s: Session, id: string) { check(await this.sb.rpc('archive_assignment', { p_assignment: id })) }
+  async assignmentDetail(s: Session, id: string) {
+    const row = check(await this.sb.from('assignments').select(ASSIGNMENT_COLS).eq('id', id).maybeSingle()) as Row | null
+    if (!row) throw new ForbiddenError('המשימה לא נמצאה או שאין לך גישה אליה')
+    const a = toAssignment(row)
+    const group = (await this.visibleGroups()).find(g => g.id === a.groupId)
+    if (!group) throw new ForbiddenError('המשימה לא נמצאה או שאין לך גישה אליה')
+    if (a.kind === 'quiz') {
+      const items = check(await this.sb.from('assignment_items').select('id, position, prompt, options').eq('assignment_id', id).order('position')) as Row[]
+      a.items = items.map(r => ({ id: String(r.id), position: Number(r.position), prompt: String(r.prompt), options: r.options as string[] }))
+      // only a teacher ever asks for the answer keys (RLS would return nothing to anyone else anyway)
+      if (s.role === 'teacher' && items.length) {
+        const keys = check(await this.sb.from('assignment_answer_keys').select('item_id, answer_index').in('item_id', items.map(r => String(r.id)))) as Row[]
+        a.items = a.items.map(it => ({ ...it, answerIndex: keys.find(k => k.item_id === it.id)?.answer_index as number | undefined }))
+      }
+    }
+    return { ...a, group }
+  }
 }
 
 /** the only way the app creates a server source: from a validated config (config.ts) */

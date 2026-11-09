@@ -2,7 +2,8 @@
 // Later: a Supabase implementation of the same interface, where every rule below is enforced by RLS and
 // Edge Functions on the server. The screens never talk to a backend directly.
 import type {
-  Adult, Assignment, AssignmentProgress, Consent, Group, Guardianship, Invitation, Material, Session, Student, SubjectProgress,
+  Adult, Assignment, AssignmentProgress, Consent, Group, Guardianship, Invitation, LearningSession, Material, PracticeEvent, QuizItem, QuizResult,
+  Session, Student, SubjectProgress,
 } from './types'
 import type { CheckResult } from '../auth/attemptLimiter'
 
@@ -54,9 +55,22 @@ export interface ChildOverview {
   subjects: SubjectProgress[]
   assignments: (Assignment & { progress?: AssignmentProgress })[]
   consents: Consent[]
+  /** recent learning sessions (newest first) */
+  sessions: LearningSession[]
 }
 
 export interface StudentTask extends Assignment { group: Group; progress?: AssignmentProgress }
+
+export interface AssignmentInput {
+  groupId: string
+  title: string
+  instructions: string
+  kind: Assignment['kind']
+  playPath?: Assignment['playPath']
+  dueAt?: string
+  /** quiz only: questions with the correct option (kept server-side, never sent to students) */
+  items?: QuizItem[]
+}
 
 export interface DataSource {
   readonly kind: 'mock' | 'supabase'
@@ -92,6 +106,13 @@ export interface DataSource {
   myInvitations(s: Session): Promise<(Invitation & { group: Group })[]>
   createGroup(s: Session, input: Pick<Group, 'name' | 'subject' | 'grade'>): Promise<Group>
   inviteParent(s: Session, groupId: string, parentEmail: string, childHint: string): Promise<Invitation>
+  // teacher: assignments (drafts are editable; published work is frozen)
+  createAssignment(s: Session, input: AssignmentInput): Promise<Assignment>
+  updateAssignment(s: Session, id: string, input: AssignmentInput): Promise<Assignment>
+  publishAssignment(s: Session, id: string): Promise<void>
+  archiveAssignment(s: Session, id: string): Promise<void>
+  /** with items; the answer keys only for the group's teacher */
+  assignmentDetail(s: Session, id: string): Promise<Assignment & { group: Group }>
   // parent
   myChildren(s: Session): Promise<ChildOverview[]>
   parentInvitations(s: Session): Promise<(Invitation & { group: Group; teacher: Adult })[]>
@@ -99,5 +120,10 @@ export interface DataSource {
   releaseLock(s: Session, studentId: string): Promise<void>
   // student
   myTasks(s: Session): Promise<StudentTask[]>
+  /** learning (student only): practice telemetry is UNVERIFIED; only submitQuiz yields a verified result */
+  startSession(s: Session, assignmentId: string | null): Promise<string>
+  recordProgress(s: Session, sessionId: string, events: PracticeEvent[]): Promise<number>
+  finishSession(s: Session, sessionId: string): Promise<void>
+  submitQuiz(s: Session, assignmentId: string, answers: number[]): Promise<QuizResult>
   myProgress(s: Session): Promise<SubjectProgress[]>
 }
