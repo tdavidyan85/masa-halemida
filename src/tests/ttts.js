@@ -15,7 +15,9 @@ await p.addInitScript(()=>{localStorage.setItem('mj-state',JSON.stringify({stars
 await p.goto('https://masa.test/'+(mode=='cloud'?'english/':'math/'));await p.waitForTimeout(700);
 const ready=await p.evaluate(()=>TTS.ready);
 await p.evaluate(()=>{pickVoice=()=>null;pickEnVoice=()=>null});console.log(mode,'ready',ready,'voiceOK',await p.evaluate(()=>voiceOK()));
-await p.evaluate(()=>sayRaw('שלום לך. הוא אומר He is a pupil. עכשיו נפתור.',null,null,null,true));await p.waitForTimeout(3000);
+await p.evaluate(()=>sayRaw('שלום לך. הוא אומר He is a pupil. עכשיו נפתור.',null,null,null,true));
+// wait for the reading itself (cloud mode needs ~3s on an idle machine – a fixed 3s wait raced it under load); the check below still fails if it never ends
+await p.waitForFunction(()=>!window._reading,null,{timeout:15000}).catch(()=>{});await p.waitForTimeout(300);
 console.log(' cloud asked',asked.length,asked.slice(0,4).map(x=>x.slice(0,40)));
 const said=await p.evaluate(()=>_said.slice(0,5));console.log(' device said',said);
 const finished=!(await p.evaluate(()=>window._reading)),off=await p.evaluate(()=>TTS.off);
