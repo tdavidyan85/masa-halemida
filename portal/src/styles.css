@@ -72,7 +72,7 @@ input:focus, select:focus { border-color: var(--primary); outline: none; }
 .nav-link:hover { background: var(--primary-soft); }
 .nav-link.active { background: var(--primary); color: #fff; }
 .nav-emoji { font-size: 1.25rem; }
-.content { padding: 24px clamp(16px, 3vw, 36px) 40px; max-width: 1180px; width: 100%; }
+.content { padding: 24px clamp(16px, 3vw, 36px) 40px; max-width: 1180px; width: 100%; min-width: 0; }   /* min-width:0 lets wide tables scroll inside their box instead of widening the page */
 .page-narrow { max-width: 560px; margin: 40px auto; padding: 0 16px; }
 .page-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; margin-bottom: 18px; }
 .h-emoji { margin-inline-end: 8px; }
@@ -84,7 +84,7 @@ input:focus, select:focus { border-color: var(--primary); outline: none; }
 .shell-student .nav-link.active { background: var(--accent); }
 
 /* ===== cards, stats, lists ===== */
-.card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 18px; margin-bottom: 18px; }
+.card { min-width: 0; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 18px; margin-bottom: 18px; }
 .card-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 10px; }
 .card-head h2 { margin: 0; }
 .card-link { display: block; text-decoration: none; color: inherit; border-top: 6px solid var(--primary); transition: transform .1s; }
@@ -178,6 +178,7 @@ input:focus, select:focus { border-color: var(--primary); outline: none; }
 /* ===== mobile ===== */
 @media (max-width: 760px) {
   body { font-size: 16px; }
+  .btn-small { min-height: 44px; padding: 8px 14px; }           /* finger-sized targets on phones */
   .shell-body { grid-template-columns: 1fr; }
   .sidenav { position: fixed; bottom: 0; inset-inline: 0; flex-direction: row; justify-content: space-around; padding: 6px 4px calc(6px + env(safe-area-inset-bottom)); border-top: 1px solid var(--line); border-inline-end: 0; z-index: 30; gap: 2px; }
   .nav-link { flex-direction: column; gap: 2px; padding: 6px 4px; font-size: .72rem; flex: 1; text-align: center; border-radius: 12px; }
