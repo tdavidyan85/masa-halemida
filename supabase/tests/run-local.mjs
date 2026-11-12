@@ -20,10 +20,10 @@ const SUPA = join(HERE, '..')
 const wi = process.argv.indexOf('--workdir')
 const workdir = wi > 0 ? process.argv[wi + 1] : join(SUPA, '..')
 
-const st = spawnSync(join(SUPA, 'node_modules/.bin/supabase'), ['status', '--workdir', workdir, '--experimental'],
+const st = spawnSync(join(SUPA, 'node_modules/.bin/supabase'), ['status', '--workdir', workdir, '--experimental', '--output-format', 'json', '--agent', 'no'],   // JSON always: without it the CLI prints a table outside agent sessions (e.g. on CI)
   { encoding: 'utf8', env: { ...process.env, SUPABASE_EXPERIMENTAL_STACK: '1' } })
 const line = (st.stdout ?? '').split('\n').filter(l => l.startsWith('{')).pop()
-if (!line) fail('✗ no running local Supabase found – start it with `npm run local:start`', `status exit ${st.status}\n${(st.stderr ?? '').slice(-1500)}\n${(st.stdout ?? '').slice(-1500)}`)
+if (!line) fail('✗ no running local Supabase found – start it with `npm run local:start`', `status exit ${st.status}; stdout has no JSON line (${(st.stdout ?? '').length} chars)`)
 const env = JSON.parse(line).env ?? {}
 for (const k of ['API_URL', 'DB_URL', 'MAILPIT_URL']) {
   if (!env[k] || !['127.0.0.1', 'localhost'].includes(new URL(env[k]).hostname)) fail(`✗ ${k} is not local – refusing`, `${k} host: ${env[k] ? new URL(env[k]).hostname : 'missing'}; keys: ${Object.keys(env).join(',')}`)
