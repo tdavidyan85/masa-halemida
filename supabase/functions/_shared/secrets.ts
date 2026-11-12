@@ -52,3 +52,13 @@ export async function sha256Hex(s: string): Promise<string> {
 export function randomSecret(bytes = 32): string {
   return b64url(crypto.getRandomValues(new Uint8Array(bytes)))
 }
+
+/** the session_id claim of an access token Supabase Auth JUST gave us (read only, not a verification) */
+export function sessionIdOf(accessToken: string): string | null {
+  try {
+    const part = accessToken.split('.')[1] ?? ''
+    const b64 = part.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - part.length % 4) % 4)
+    const id = JSON.parse(atob(b64)).session_id
+    return typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id) ? id : null
+  } catch { return null }
+}

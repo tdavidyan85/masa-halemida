@@ -13,10 +13,12 @@ export interface LoginDb {
   record(studentId: string | null, ipHash: string | null, ok: boolean, deviceHash: string | null):
     Promise<{ ok: boolean; remaining?: number; locked_until?: string | null; hard_locked?: boolean }>
   deviceProfiles(deviceHashes: string[]): Promise<{ student_id: string; first_name: string; avatar_path: string | null }[]>
+  /** ties the new session to the device it was opened on, so revoking the device ends it (fails → no session) */
+  bindSession(sessionId: string, studentId: string, deviceHash: string | null): Promise<void>
 }
 export interface LoginAuth {
   /** a normal Supabase Auth session for this (student) user – made by Supabase Auth, not by us */
-  sessionFor(email: string): Promise<{ access_token: string; refresh_token: string; expires_in: number }>
+  sessionFor(email: string): Promise<{ access_token: string; refresh_token: string; expires_in: number; session_id: string }>
 }
 export interface LoginDeps { db: LoginDb; auth: LoginAuth; verify?: typeof verifySecret }
 
@@ -94,5 +96,7 @@ export async function studentLogin(input: unknown, ipHash: string | null, deps: 
   }
 
   // 5. only now: a normal session from Supabase Auth
-  return { status: 200, body: { session: await deps.auth.sessionFor(acct.email) } }
+  const { session_id, ...session } = await deps.auth.sessionFor(acct.email)
+  await deps.db.bindSession(session_id, acct.student_id, deviceHash)   // throws → the client gets no tokens
+  return { status: 200, body: { session } }
 }

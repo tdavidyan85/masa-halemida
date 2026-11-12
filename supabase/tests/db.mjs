@@ -73,7 +73,12 @@ function session(client) {
         await client.query(`select set_config('request.jwt.claims', '{"role":"anon"}', true)`)
         await client.query('set local role anon')
       } else {
-        await client.query(`select set_config('request.jwt.claims', $1, true)`, [JSON.stringify({ sub: userId, role: 'authenticated' })])
+        // a student's real token is always bound to a live session (student-login → srv_bind_student_session)
+        const claims = { sub: userId, role: 'authenticated' }
+        const st = await client.query(`insert into public.student_sessions (session_id, student_id)
+          select gen_random_uuid(), id from public.students where id = $1 returning session_id`, [userId])
+        if (st.rows[0]) claims.session_id = st.rows[0].session_id
+        await client.query(`select set_config('request.jwt.claims', $1, true)`, [JSON.stringify(claims)])
         await client.query('set local role authenticated')
       }
       return s

@@ -1,7 +1,7 @@
 // Phase 5 security audit – a regression test for every finding, plus OCR confidence, draft editing and AI safeguards.
 import { after, before, describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { startDb, tx, U } from './db.mjs'
 
 let db
@@ -132,4 +132,85 @@ describe('AI spending safeguards', () => {
       assert.match((await s.fails(`select * from public.ai_requests`)).message, /permission denied/)
     }
   }))
+})
+
+// A5 (Phase 5.1): revoking a child's device did not end the sessions already opened on it.
+describe('A5 – revoking a device ends its sessions on the server', () => {
+  const sha = x => createHash('sha256').update(x).digest('hex')
+  /** act as the student with a REAL-looking token: role authenticated + sub + session_id */
+  const asStudentSession = async (s, student, sid) => {
+    await s.asOwner()
+    await s.rows(`select set_config('request.jwt.claims', $1, true)`, [JSON.stringify({ sub: student, role: 'authenticated', ...(sid ? { session_id: sid } : {}) })])
+    await s.rows('set local role authenticated')
+  }
+  const ok = async s => (await s.one('select app.student_session_ok() as v')).v
+  async function enrolled(s) {
+    await s.as(U.P1)
+    const token = (await s.one('select public.enroll_device($1) as t', [U.S1])).t
+    const dev = (await s.one('select id from public.student_devices where student_id = $1 order by created_at desc limit 1', [U.S1])).id
+    return { hash: sha(token), dev }
+  }
+
+  it('a session bound to an approved device works; after the parent revokes the device it is refused', t(async s => {
+    const { hash, dev } = await enrolled(s)
+    const sid = randomUUID()
+    await s.asService(); await s.rows('select public.srv_bind_student_session($1, $2, $3)', [sid, U.S1, hash])
+    await asStudentSession(s, U.S1, sid)
+    assert.equal(await ok(s), true)
+    await s.rows('select app.check_request()')                                   // the PostgREST hook lets it through
+    await s.as(U.P1); await s.rows('select public.revoke_device($1)', [dev])
+    await asStudentSession(s, U.S1, sid)
+    assert.equal(await ok(s), false)
+    const e = await s.fails('select app.check_request()')
+    assert.equal(e.code, 'PT401')                                                  // → HTTP 401 on every REST/RPC call
+  }))
+
+  it('fails closed: an unbound session, a missing session_id or another student\'s binding is refused', t(async s => {
+    const { hash } = await enrolled(s)
+    const sid = randomUUID()
+    await s.asService(); await s.rows('select public.srv_bind_student_session($1, $2, $3)', [sid, U.S1, hash])
+    await asStudentSession(s, U.S1, randomUUID()); assert.equal(await ok(s), false)
+    await asStudentSession(s, U.S1, null); assert.equal(await ok(s), false)
+    await asStudentSession(s, U.S2, sid); assert.equal(await ok(s), false)
+  }))
+
+  it('adults and anonymous callers are not affected', t(async s => {
+    for (const who of [U.P1, U.T1, U.A1].filter(Boolean)) { await s.as(who); assert.equal(await ok(s), true); await s.rows('select app.check_request()') }
+    await s.as('anon'); assert.equal(await ok(s), true); await s.rows('select app.check_request()')
+  }))
+
+  it('binding: only the server; a PIN child needs an approved, non-revoked device of THEIR OWN', t(async s => {
+    const { hash, dev } = await enrolled(s)
+    for (const who of [U.S1, U.P1]) {
+      await s.as(who)
+      assert.match((await s.fails('select public.srv_bind_student_session($1, $2, $3)', [randomUUID(), U.S1, hash])).message, /permission denied/)
+      assert.match((await s.fails('select * from public.student_sessions')).message, /permission denied/)
+    }
+    await s.asService()
+    assert.match((await s.fails('select public.srv_bind_student_session($1, $2, null)', [randomUUID(), U.S1])).message, /approved device/)
+    assert.match((await s.fails('select public.srv_bind_student_session($1, $2, $3)', [randomUUID(), U.S4, hash])).message, /not approved/)
+    await s.as(U.P1); await s.rows('select public.revoke_device($1)', [dev])
+    await s.asService()
+    assert.match((await s.fails('select public.srv_bind_student_session($1, $2, $3)', [randomUUID(), U.S1, hash])).message, /not approved/)
+    await s.rows('select public.srv_bind_student_session($1, $2, null)', [randomUUID(), U.S2])   // username+password child: no device
+  }))
+
+  it('storage: a revoked session cannot read the child\'s picture', t(async s => {
+    const { hash, dev } = await enrolled(s)
+    const sid = randomUUID()
+    await s.asOwner(); await s.rows(`insert into storage.objects (bucket_id, name) values ('avatars', $1)`, [`${U.S1}/me.png`])
+    await s.asService(); await s.rows('select public.srv_bind_student_session($1, $2, $3)', [sid, U.S1, hash])
+    await asStudentSession(s, U.S1, sid)
+    assert.equal((await s.rows(`select 1 from storage.objects where bucket_id = 'avatars'`)).length, 1)
+    await s.as(U.P1); await s.rows('select public.revoke_device($1)', [dev])
+    await asStudentSession(s, U.S1, sid)
+    assert.equal((await s.rows(`select 1 from storage.objects where bucket_id = 'avatars'`)).length, 0)
+  }))
+
+  it('the login flow binds the session and never returns the session id to the client', async () => {
+    const { sessionIdOf } = await import('../functions/_shared/secrets.ts')
+    const id = randomUUID(), b64 = o => Buffer.from(JSON.stringify(o)).toString('base64url')
+    assert.equal(sessionIdOf(`${b64({ alg: 'HS256' })}.${b64({ sub: 'x', session_id: id })}.sig`), id)
+    for (const bad of ['', 'a.b.c', `${b64({})}.${b64({ session_id: 'not-a-uuid' })}.s`]) assert.equal(sessionIdOf(bad), null)
+  })
 })

@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 // Tests for the Edge Function logic (supabase/functions/_shared/*.ts, loaded by Node's type stripping).
 // Part 1: units with fakes. Part 2: the same logic against the local test database (real SQL functions,
 // real limits) – only Supabase Auth itself is replaced by a fake, so the session step is NOT tested here.
@@ -65,9 +66,10 @@ describe('student login flow (fakes)', () => {
         gate: async (...a) => { calls.push(['gate', ...a]); return { allowed: true } },
         record: async (...a) => { calls.push(['record', ...a]); return a[2] ? { ok: true } : { ok: false, remaining: 4 } },
         deviceProfiles: async h => { calls.push(['profiles', h]); return [] },
+        bindSession: async (...a) => { calls.push(['bind', ...a]) },
         ...over.db,
       },
-      auth: { sessionFor: async e => { calls.push(['session', e]); return { access_token: 'a', refresh_token: 'r', expires_in: 3600 } } },
+      auth: { sessionFor: async e => { calls.push(['session', e]); return { access_token: 'a', refresh_token: 'r', expires_in: 3600, session_id: '11111111-1111-4111-8111-111111111111' } } },
       verify: over.verify ?? (async s => s === '480317'),
     }
     return { deps, calls }
@@ -78,8 +80,10 @@ describe('student login flow (fakes)', () => {
     const { deps, calls } = fake()
     const r = await studentLogin(pin(), 'ip', deps)
     assert.equal(r.status, 200)
-    assert.deepEqual(calls.map(c => c[0]), ['gate', 'lookup', 'gate', 'record', 'session'])
+    assert.deepEqual(calls.map(c => c[0]), ['gate', 'lookup', 'gate', 'record', 'session', 'bind'])
     assert.equal(calls.find(c => c[0] === 'record')[3], true)
+    assert.deepEqual(calls.find(c => c[0] === 'bind').slice(1), ['11111111-1111-4111-8111-111111111111', 'st', await sha256Hex('a'.repeat(64))])
+    assert.deepEqual(Object.keys(r.body.session).sort(), ['access_token', 'expires_in', 'refresh_token'])   // no session id to the client
   })
   it('a wrong PIN never reaches Supabase Auth', async () => {
     const { deps, calls } = fake()
@@ -130,8 +134,9 @@ describe('against the local database', () => {
         gate: async (st, ip) => (await svc('select public.srv_login_gate($1,$2) as g', [st, ip]))[0].g,
         record: async (st, ip, ok, d) => (await svc('select public.srv_login_record($1,$2,$3,$4) as r', [st, ip, ok, d]))[0].r,
         deviceProfiles: async h => svc('select * from public.srv_device_profiles($1)', [h]),
+        bindSession: async (sid, st, d) => { await svc('select public.srv_bind_student_session($1,$2,$3)', [sid, st, d]) },
       },
-      auth: { sessionFor: async email => { authLog.push(['session', email]); return { access_token: 'fake', refresh_token: 'fake', expires_in: 1 } } },
+      auth: { sessionFor: async email => { authLog.push(['session', email]); return { access_token: 'fake', refresh_token: 'fake', expires_in: 1, session_id: randomUUID() } } },
     }
     const manage = {
       iterations: FAST,

@@ -216,10 +216,31 @@ describe('end-to-end on a local Supabase', { skip: !ready && 'set E2E_API_URL, E
     assert.equal((await fn(stranger, 'student-login', { mode: 'pin', studentId: st.kidId, pin: '480317', deviceToken: st.device })).status, 401)
     assert.equal((await fn(stranger, 'student-login', { mode: 'pin', studentId: st.kidId, pin: '572049', deviceToken: st.device })).status, 200)
   })
-  it('revoking the device stops PIN sign-in from it', async () => {
+  it('revoking the device stops PIN sign-in from it AND ends the sessions already open on it (A5)', async () => {
+    // a live session opened on the device, before the revoke
+    const r = await fn(stranger, 'student-login', { mode: 'pin', studentId: st.kidId, pin: '572049', deviceToken: st.device })
+    assert.equal(r.status, 200)
+    assert.ifError((await kid.auth.setSession({ access_token: r.body.session.access_token, refresh_token: r.body.session.refresh_token })).error)
+    assert.deepEqual((await kid.from('students').select('id')).data.map(p => p.id), [st.kidId])
     const dev = (await parent.from('student_devices').select('id')).data[0].id
     assert.ifError((await parent.rpc('revoke_device', { p_device: dev })).error)
     assert.equal((await fn(stranger, 'student-login', { mode: 'pin', studentId: st.kidId, pin: '572049', deviceToken: st.device })).status, 401)
+    // the SAME access token is now refused by the server on REST, RPC and Storage …
+    const rest = await kid.from('students').select('id')
+    assert.equal(rest.status, 401, JSON.stringify(rest)); assert.equal(rest.error?.code, 'PT401')
+    assert.equal((await kid.rpc('start_session', { p_assignment: '00000000-0000-4000-8000-000000000000' })).status, 401)   // refused before the function even runs
+    assert.ok((await kid.storage.from('avatars').list(st.kidId)).data?.length !== 1)
+    // … and a refreshed token is refused too (same session)
+    await kid.auth.refreshSession()
+    assert.equal((await kid.from('students').select('id')).status, 401)
+    // adults are not affected
+    assert.equal((await parent.from('students').select('id')).status, 200)
+    // a new approved device gives the child a working session again (later tests use it)
+    st.device = (await parent.rpc('enroll_device', { p_student: st.kidId, p_label: 'טאבלט חדש' })).data
+    const again = await fn(stranger, 'student-login', { mode: 'pin', studentId: st.kidId, pin: '572049', deviceToken: st.device })
+    assert.equal(again.status, 200)
+    assert.ifError((await kid.auth.setSession({ access_token: again.body.session.access_token, refresh_token: again.body.session.refresh_token })).error)
+    assert.equal((await kid.from('students').select('id')).status, 200)
   })
   it('CORS answers only the portal\'s origin', async () => {
     const ok = await fn(stranger, 'student-login', { mode: 'profiles', deviceTokens: [] })

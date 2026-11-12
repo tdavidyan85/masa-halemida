@@ -1,7 +1,7 @@
 // SupabaseSource against a FAKE supabase-js client (src/test/fakeSupabase.ts). What this proves: the portal calls
 // the right Auth APIs / RPCs / functions, never reads closed columns, and turns every answer into the right
 // error. What it cannot prove: how the real Supabase answers – that needs a real (local) Supabase.
-import { SupabaseSource, toUserError } from './supabaseSource'
+import { SupabaseSource, toUserError, watchRevokedSession } from './supabaseSource'
 import { ForbiddenError, LoginError, ServerError } from './source'
 import type { Session } from './types'
 import { fakeSupabase } from '../test/fakeSupabase'
@@ -187,6 +187,7 @@ describe('reads', () => {
 
 describe('errors a user can read', () => {
   it('maps permission errors, network errors and the rest', () => {
+    expect(toUserError({ code: 'PT401', message: 'session_revoked' }).message).toMatch('המכשיר הזה כבר לא מאושר')
     expect(toUserError({ code: '42501', message: 'permission denied for table students' })).toBeInstanceOf(ForbiddenError)
     expect(toUserError({ message: 'new row violates row-level security policy' })).toBeInstanceOf(ForbiddenError)
     expect(toUserError(new TypeError('Failed to fetch')).message).toMatch('אין חיבור לשרת')
@@ -255,5 +256,22 @@ describe('materials (phase 4)', () => {
   it('AI: the server\'s "not configured" answer reaches the user as is; nothing is pretended', async () => {
     const { src } = make({ functions: { 'generate-content': () => ({ status: 503, body: { error: 'ai_unavailable', message: 'יצירה עם בינה מלאכותית לא מוגדרת בשרת הזה' } }) } })
     await expect(src.requestAiDraft(sess(T, 'teacher'), 'mat-1', { subjectName: 'מדעים', grade: 'ה' })).rejects.toThrow('לא מוגדרת')
+  })
+})
+
+describe('a revoked device ends the session in the portal too', () => {
+  const reply = (status: number, body: unknown) => async () => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
+  it('a PT401 from the REST API signs the child out here; the response still reaches the caller', async () => {
+    let out = 0
+    const f = watchRevokedSession(reply(401, { code: 'PT401', message: 'session_revoked' }), () => { out++ })
+    const r = await f('http://127.0.0.1:54321/rest/v1/students?select=id')
+    expect(r.status).toBe(401); expect((await r.json()).code).toBe('PT401'); expect(out).toBe(1)
+  })
+  it('other 401s, other services and normal answers do not sign anyone out', async () => {
+    let out = 0
+    await watchRevokedSession(reply(401, { code: 'PGRST301' }), () => { out++ })('http://h/rest/v1/x')
+    await watchRevokedSession(reply(401, { code: 'PT401' }), () => { out++ })('http://h/auth/v1/user')
+    await watchRevokedSession(reply(200, []), () => { out++ })('http://h/rest/v1/x')
+    expect(out).toBe(0)
   })
 })

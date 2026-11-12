@@ -22,10 +22,26 @@ const ROLE_ORDER: Role[] = ['admin', 'teacher', 'parent', 'student']
 const DEVICE_KEY = 'masa-device-tokens'              // { studentId: deviceToken } – this device's PIN approvals
 
 interface PgError { code?: string; message?: string }
+const REVOKED_MSG = 'המכשיר הזה כבר לא מאושר. צריך להתחבר מחדש'
+/**
+ * The server refuses a child's session once a parent revoked the device it was opened on (HTTP 401, code PT401 –
+ * see the student_session_revocation migration). This fetch wrapper notices it and ends the session here too,
+ * so the child is sent back to the sign-in screen instead of seeing broken pages.
+ */
+export function watchRevokedSession(base: typeof fetch, onRevoked: () => void): typeof fetch {
+  return async (input, init) => {
+    const res = await base(input, init)
+    if (res.status === 401 && /\/rest\/v1\//.test(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url)) {
+      try { if ((await res.clone().json() as PgError).code === 'PT401') onRevoked() } catch { /* not JSON */ }
+    }
+    return res
+  }
+}
 /** turn any server error into something a user can read */
 export function toUserError(e: unknown): Error {
   if (e instanceof LoginError || e instanceof ForbiddenError || e instanceof ServerError) return e
   const err = (e ?? {}) as PgError & { name?: string }
+  if (err.code === 'PT401') return new LoginError(REVOKED_MSG)
   if (err.code === '42501' || /permission denied|row-level security/i.test(err.message ?? '')) return new ForbiddenError()
   if (err.name === 'TypeError' || /fetch|network/i.test(err.message ?? '')) return new ServerError('אין חיבור לשרת. בדקו את האינטרנט ונסו שוב')
   return new ServerError()
@@ -551,8 +567,9 @@ export class SupabaseSource implements DataSource {
 
 /** the only way the app creates a server source: from a validated config (config.ts) */
 export function createSupabaseSource(cfg: ServerConfig, redirectTo = `${location.origin}${location.pathname}`): DataSource {
-  const sb = createClient(cfg.url, cfg.anonKey, {
+  const sb: SupabaseClient = createClient(cfg.url, cfg.anonKey, {
     auth: { flowType: 'pkce', persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, storageKey: 'masa-portal-auth' },
+    global: { fetch: watchRevokedSession((...a) => fetch(...a), () => { void sb.auth.signOut({ scope: 'local' }) }) },
   })
   return new SupabaseSource(sb, redirectTo)
 }

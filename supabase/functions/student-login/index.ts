@@ -7,7 +7,7 @@
 // config.toml sets verify_jwt = false for this function: a student has no session yet when signing in.
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { studentLogin } from '../_shared/studentLogin.ts'
-import { sha256Hex } from '../_shared/secrets.ts'
+import { sessionIdOf, sha256Hex } from '../_shared/secrets.ts'
 import { clientIp, corsHeaders, errorResponse, json } from '../_shared/http.ts'
 
 const URL_ = Deno.env.get('SUPABASE_URL')!
@@ -31,6 +31,9 @@ const deps = {
     record: (studentId: string | null, ipHash: string | null, ok: boolean, deviceHash: string | null) =>
       rpc<{ ok: boolean; remaining?: number; locked_until?: string | null; hard_locked?: boolean }>('srv_login_record', { p_student: studentId, p_ip_hash: ipHash, p_ok: ok, p_device_hash: deviceHash }),
     deviceProfiles: (hashes: string[]) => rpc<{ student_id: string; first_name: string; avatar_path: string | null }[]>('srv_device_profiles', { p_device_hashes: hashes }),
+    bindSession: async (sessionId: string, studentId: string, deviceHash: string | null) => {
+      await rpc('srv_bind_student_session', { p_session: sessionId, p_student: studentId, p_device_hash: deviceHash })
+    },
   },
   auth: {
     // Supabase Auth makes the session: an admin magic-link token, exchanged at once on the server.
@@ -40,7 +43,9 @@ const deps = {
       if (e1 || !link?.properties?.hashed_token) throw new Error('generateLink failed')
       const { data, error: e2 } = await anon.auth.verifyOtp({ token_hash: link.properties.hashed_token, type: 'magiclink' })
       if (e2 || !data.session) throw new Error('verifyOtp failed')
-      return { access_token: data.session.access_token, refresh_token: data.session.refresh_token, expires_in: data.session.expires_in }
+      const sessionId = sessionIdOf(data.session.access_token)
+      if (!sessionId) throw new Error('no session id')
+      return { access_token: data.session.access_token, refresh_token: data.session.refresh_token, expires_in: data.session.expires_in, session_id: sessionId }
     },
   },
 }
