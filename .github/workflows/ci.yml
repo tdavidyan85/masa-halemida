@@ -122,3 +122,31 @@ jobs:
       - run: npm ci
       - name: Migrations, RLS and Edge Function logic tests
         run: npm test
+
+  # A REAL local Supabase inside the job (Auth, REST, Storage, Edge Runtime, Mailpit), then RLS, learning,
+  # materials, Edge Function logic and end-to-end tests against it. Nothing in the cloud, no secrets:
+  # the stack's keys are the CLI's public local-development keys. Versions are pinned by supabase/supabase.lock.
+  # The CLI picks Docker on GitHub's runners (installed there); on a developer Mac without Docker it uses its
+  # native runtime (same commands). Tests only – never deploys.
+  supabase-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+        working-directory: supabase
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: supabase/package-lock.json
+      - run: npm ci
+      - name: Start local Supabase (applies every migration)
+        run: npm run local:start
+      - name: Integration tests against it
+        run: npm run test:local
+      - name: Stop
+        if: always()
+        run: npm run local:stop
