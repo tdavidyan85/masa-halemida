@@ -137,3 +137,27 @@ export function checkPack(p: unknown): string[] {
   if (JSON.stringify(pack).length > 280_000) e.push('pack too large')
   return e
 }
+
+/** extra rules for content that came from an AI provider (children will read it): sizes, and nothing that does not belong */
+const ALLOWED_TAGS = /<\/?(en|m|f|mx)>/g
+export function checkSafeContent(p: unknown): string[] {
+  const e = checkPack(p)
+  if (e.length) return e
+  const pack = p as Json
+  const topics = pack.topics as Json[], pools = Object.values(pack.pools as Record<string, Json>)
+  const items = pools.flatMap(x => (x.items as Json[]) ?? [])
+  if (topics.length > 12) e.push('too many topics (max 12)')
+  if (items.length > 200) e.push('too many items (max 200)')
+  const texts: string[] = []
+  const walk = (v: unknown) => { if (typeof v === 'string') texts.push(v); else if (Array.isArray(v)) v.forEach(walk); else if (v && typeof v === 'object') Object.values(v).forEach(walk) }
+  walk(topics); walk(pools)
+  for (const t of texts) {
+    if (t.length > 1200) { e.push('a text is too long'); break }
+    const plain = t.replace(ALLOWED_TAGS, '')
+    if (/<\s*\/?\s*[a-z!]/i.test(plain)) { e.push('HTML is not allowed'); break }
+    if (/https?:\/\/|www\.|javascript:/i.test(plain)) { e.push('links are not allowed'); break }
+    if (/[\w.+-]+@[\w-]+\.[\w.-]+/.test(plain)) { e.push('e-mail addresses are not allowed'); break }
+    if (/(?:\+972|\b0)\d{1,2}[-\s]?\d{3}[-\s]?\d{4}\b/.test(plain)) { e.push('phone numbers are not allowed'); break }
+  }
+  return e
+}

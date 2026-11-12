@@ -1,19 +1,20 @@
 // Learning materials for teachers and parents: upload → text → topics → content draft → review → share / quiz.
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { useSession } from '../auth/AuthContext'
 import { AsyncView, EmptyState, ErrorState, Loading } from '../components/States'
-import { Badge, Card, PageHeader, formatDate } from '../components/ui'
+import { Badge, Card, PageHeader, ProgressBar, formatDate } from '../components/ui'
 import { useData } from '../data'
 import { DemoOnlyError } from '../data/source'
 import type { ContentDraft, Group, MaterialDetail, MaterialTopic } from '../data/types'
 import { useAsync } from '../hooks/useAsync'
-import { ACCEPTED, checkFile, extractPdfText } from '../materials/extract'
+import { ACCEPTED, checkFile, extractImageText, extractPdfText } from '../materials/extract'
+import type { Extraction } from '../materials/extract'
 import { splitIntoTopics } from '../../../supabase/functions/_shared/content'
 
 const EXTRACTION: Record<string, [string, 'neutral' | 'good' | 'warn' | 'bad' | 'info']> = {
-  pending: ['טקסט: עוד לא חולץ', 'neutral'], done: ['טקסט מוכן', 'good'], failed: ['לא נמצא טקסט', 'warn'], unsupported: ['תמונה: מקלידים טקסט', 'info'],
+  pending: ['טקסט: עוד לא חולץ', 'neutral'], done: ['טקסט מוכן', 'good'], failed: ['לא נמצא טקסט', 'warn'], unsupported: ['תמונה: לזיהוי טקסט', 'info'],
 }
 const base = (role: string) => (role === 'parent' ? '/parent/materials' : '/teacher/materials')
 
@@ -115,27 +116,37 @@ type Run = (fn: () => Promise<unknown>, ok: string) => Promise<void>
 function TextStep({ d, run }: { d: MaterialDetail; run: Run }) {
   const data = useData(), s = useSession()
   const [text, setText] = useState(d.text ?? '')
-  const [busy, setBusy] = useState(false)
-  const fileInput = useRef<HTMLInputElement>(null)
+  const [progress, setProgress] = useState<number | null>(null)
+  const [info, setInfo] = useState<{ method: Extraction['method']; confidence?: number; uncertain?: string[] } | null>(
+    d.material.extractionConfidence != null ? { method: 'ocr', confidence: d.material.extractionConfidence } : null)
   const isPdf = d.material.mimeType === 'application/pdf'
-  async function extract(file: File) {
-    setBusy(true)
+  async function extract(file?: Blob) {
+    setProgress(0)
     await run(async () => {
-      const r = await extractPdfText(await file.arrayBuffer())
-      if (!r.text.trim()) throw new Error('לא נמצא טקסט ב-PDF (אולי זו סריקה). אפשר להקליד או להדביק את הטקסט כאן.')
-      setText(r.text)
-      await data.saveExtraction(s, d.material.id, r.text, r.pages)
-    }, 'הטקסט חולץ ונשמר')
-    setBusy(false)
+      const blob = file ?? await (await fetch(await data.materialFileUrl(s, d.material.id))).blob()
+      const r = isPdf ? await extractPdfText(await blob.arrayBuffer(), { onProgress: setProgress }) : await extractImageText(blob, setProgress)
+      if (!r.text.trim()) throw new Error('לא נמצא טקסט. אפשר להקליד או להדביק אותו כאן.')
+      setText(r.text); setInfo(r)
+      await data.saveExtraction(s, d.material.id, r.text, r.pages, r.confidence)
+    }, 'הטקסט חולץ ונשמר. כדאי לעבור עליו ולתקן.')
+    setProgress(null)
   }
   return (
     <Card title="1. הטקסט">
-      {isPdf
-        ? <p className="small muted">החילוץ נעשה במחשב שלך, בלי לשלוח את הקובץ לשום שירות. בוחרים שוב את אותו קובץ PDF:</p>
-        : <p className="small muted">זיהוי טקסט מתמונה (OCR) עוד לא נתמך אוטומטית. אפשר להקליד או להדביק את הטקסט שבדף.</p>}
-      {isPdf && <div className="row wrap"><input ref={fileInput} type="file" accept="application/pdf" aria-label="קובץ PDF לחילוץ" onChange={e => { const f = e.target.files?.[0]; if (f) void extract(f) }} />{busy && <span className="small">מחלצים…</span>}</div>}
-      <label className="field" style={{ marginTop: 10 }}>הטקסט (אפשר לתקן)<textarea rows={8} value={text} onChange={e => setText(e.target.value)} /></label>
-      <button className="btn btn-secondary" onClick={() => run(() => data.saveExtraction(s, d.material.id, text, d.material.pages), 'הטקסט נשמר')}>שמירת הטקסט</button>
+      <p className="small muted">{isPdf ? 'קוראים את הטקסט מה-PDF. דפים סרוקים עוברים זיהוי טקסט (OCR).' : 'זיהוי טקסט מהתמונה (OCR) בעברית ובאנגלית.'} הכול נעשה במחשב שלך, והקובץ לא נשלח לשום שירות.</p>
+      <div className="row wrap">
+        <button className="btn btn-primary" disabled={progress !== null} onClick={() => extract()}>{progress !== null ? 'מחלצים…' : 'חילוץ טקסט'}</button>
+        <label className="small">או מקובץ מהמחשב: <input type="file" accept={isPdf ? 'application/pdf' : 'image/*'} aria-label="קובץ לחילוץ" onChange={e => { const f = e.target.files?.[0]; if (f) void extract(f) }} /></label>
+      </div>
+      {progress !== null && <ProgressBar value={progress * 100} label="התקדמות החילוץ" />}
+      {info?.confidence !== undefined && (
+        <div className={`ocr-info ${info.confidence < 70 ? 'low' : ''}`} role="status">
+          <b>רמת ביטחון של הזיהוי: {info.confidence}%</b>{info.confidence < 70 && ' · כדאי לבדוק את הטקסט בעיון'}
+          {!!info.uncertain?.length && <div className="small">מילים שכדאי לבדוק: {info.uncertain.map(w => <mark key={w}>{w}</mark>)}</div>}
+        </div>
+      )}
+      <label className="field" style={{ marginTop: 10 }}>הטקסט (אפשר לתקן)<textarea rows={8} value={text} onChange={e => setText(e.target.value)} dir="auto" /></label>
+      <button className="btn btn-secondary" onClick={() => run(() => data.saveExtraction(s, d.material.id, text, d.material.pages, info?.confidence), 'הטקסט נשמר')}>שמירת הטקסט</button>
     </Card>
   )
 }
@@ -157,7 +168,11 @@ function TopicsStep({ d, run }: { d: MaterialDetail; run: Run }) {
           <legend className="small">נושא {i + 1}</legend>
           <input aria-label={`שם נושא ${i + 1}`} value={t.title} onChange={e => set(i, { title: e.target.value })} style={{ width: '100%' }} />
           <textarea aria-label={`תוכן נושא ${i + 1}`} rows={3} value={t.body} onChange={e => set(i, { body: e.target.value })} style={{ width: '100%', marginTop: 6 }} />
-          <button className="btn btn-small btn-ghost" onClick={() => setTopics(ts => ts.filter((_, j) => j !== i))}>מחיקה</button>
+          <span className="row wrap">
+            <button className="btn btn-small btn-ghost" disabled={i === 0} aria-label={`להזיז את נושא ${i + 1} למעלה`} onClick={() => setTopics(ts => { const c = [...ts]; [c[i - 1], c[i]] = [c[i], c[i - 1]]; return c })}>↑</button>
+            <button className="btn btn-small btn-ghost" disabled={i === topics.length - 1} aria-label={`להזיז את נושא ${i + 1} למטה`} onClick={() => setTopics(ts => { const c = [...ts]; [c[i + 1], c[i]] = [c[i], c[i + 1]]; return c })}>↓</button>
+            <button className="btn btn-small btn-ghost" onClick={() => setTopics(ts => ts.filter((_, j) => j !== i))}>מחיקה</button>
+          </span>
         </fieldset>
       ))}
       {topics.length > 0 && <button className="btn btn-primary" onClick={() => run(() => data.saveTopics(s, d.material.id, topics), 'הנושאים נשמרו')}>שמירת הנושאים</button>}
@@ -165,51 +180,91 @@ function TopicsStep({ d, run }: { d: MaterialDetail; run: Run }) {
   )
 }
 
-function DraftPreview({ draft }: { draft: ContentDraft }) {
-  const pack = draft.pack as { topics?: { name: string; lessons?: { title: string; text: string }[] }[]; pools?: Record<string, { items: { text: string; options?: string[]; answer?: string }[] }> }
-  const items = Object.values(pack.pools ?? {}).flatMap(p => p.items)
+type PackItem = { id: string; text: string; options?: string[]; answer?: string; hint?: string }
+type Pack = { topics?: { name: string; lessons?: { title: string; text: string }[] }[]; pools?: Record<string, { items: PackItem[] }>; generator?: { kind?: string; edited?: boolean } }
+const itemsOf = (p: Pack) => Object.entries(p.pools ?? {}).flatMap(([k, pool]) => pool.items.map(it => ({ key: `${k}/${it.id}`, pool: k, it })))
+
+/** a draft: preview, edit before approval, choose questions for a quiz after approval */
+function DraftCard({ dr, d, run }: { dr: ContentDraft; d: MaterialDetail; run: Run }) {
+  const data = useData(), s = useSession(), navigate = useNavigate()
+  const [pack, setPack] = useState<Pack>(dr.pack as Pack)
+  const [editing, setEditing] = useState(false)
+  const [chosen, setChosen] = useState<string[]>(() => itemsOf(dr.pack as Pack).filter(x => Array.isArray(x.it.options)).map(x => x.key))
+  const [target, setTarget] = useState('')
+  const groups = useAsync(() => (s.role === 'teacher' ? data.myGroups(s) : Promise.resolve([] as Group[])), [data, s.userId])
+  const items = itemsOf(pack)
+  const setItem = (pool: string, id: string, patch: Partial<PackItem>) => setPack(p => ({ ...p, pools: { ...p.pools, [pool]: { ...p.pools![pool], items: p.pools![pool].items.map(it => (it.id === id ? { ...it, ...patch } : it)) } } }))
+  const removeItem = (pool: string, id: string) => setPack(p => ({ ...p, pools: { ...p.pools, [pool]: { ...p.pools![pool], items: p.pools![pool].items.filter(it => it.id !== id) } } }))
+  const status = dr.status === 'approved' ? 'אושר' : dr.status === 'rejected' ? 'נדחה' : 'ממתין לבדיקה'
   return (
-    <details className="draft-preview">
-      <summary>{pack.topics?.length ?? 0} נושאים · {items.length} שאלות · לצפייה</summary>
-      {pack.topics?.map((t, i) => <div key={i}><b>{t.name}</b>{t.lessons?.map((l, j) => <p key={j} className="small">{l.text}</p>)}</div>)}
-      <ol className="small">{items.slice(0, 20).map((it, i) => <li key={i}>{it.text.replace('\n', ' – ')}{it.options ? ` [${it.options.join(' / ')}] ✓ ${it.answer}` : ''}</li>)}</ol>
-    </details>
+    <li className="draft-card">
+      <div className="row wrap" style={{ justifyContent: 'space-between' }}>
+        <span className="row wrap">
+          <Badge tone={dr.provider === 'ai' ? 'info' : 'neutral'}>{dr.provider === 'ai' ? 'נוצר ב-AI' : 'תבנית, ללא AI'}</Badge>
+          {(dr.pack as Pack).generator?.edited && <Badge>נערך בידי מבוגר</Badge>}
+          <span className={`status-pill status-${dr.status === 'approved' ? 'published' : dr.status === 'rejected' ? 'archived' : 'draft'}`}>{status}</span>
+          <span className="small muted">{pack.topics?.length ?? 0} נושאים · {items.length} שאלות</span>
+        </span>
+        {dr.status === 'draft' && <span className="row wrap">
+          {!editing && <button className="btn btn-small btn-ghost" onClick={() => setEditing(true)}>עריכה</button>}
+          <button className="btn btn-small btn-primary" onClick={() => run(() => data.reviewDraft(s, dr.id, true), 'התוכן אושר')}>אישור</button>
+          <button className="btn btn-small btn-secondary" onClick={() => run(() => data.reviewDraft(s, dr.id, false), 'התוכן נדחה')}>דחייה</button>
+        </span>}
+      </div>
+      {/* opened for editing, and after approval so the teacher can pick the quiz questions */}
+      <details className="draft-preview" open={editing || (dr.status === 'approved' && s.role === 'teacher')}>
+        <summary>לצפייה{dr.status === 'draft' ? ' ולעריכה' : ''}</summary>
+        {pack.topics?.map((t, i) => <div key={i}><b>{t.name}</b>{t.lessons?.map((l, j) => <p key={j} className="small">{l.text}</p>)}</div>)}
+        <ol className="draft-items">{items.map(({ key, pool, it }) => (
+          <li key={key}>
+            {editing ? (
+              <div className="quiz-editor">
+                <input aria-label={`ניסוח ${it.id}`} value={it.text} onChange={e => setItem(pool, it.id, { text: e.target.value })} style={{ width: '100%' }} />
+                {it.options?.map((o, j) => (
+                  <div key={j} className="opt-row">
+                    <input type="radio" name={`a-${key}`} aria-label={`תשובה נכונה ${it.id} ${j + 1}`} checked={it.answer === o} onChange={() => setItem(pool, it.id, { answer: o })} />
+                    <input type="text" aria-label={`תשובה ${it.id} ${j + 1}`} value={o} onChange={e => setItem(pool, it.id, { options: it.options!.map((x, k) => (k === j ? e.target.value : x)), ...(it.answer === o ? { answer: e.target.value } : {}) })} />
+                  </div>
+                ))}
+                <button className="btn btn-small btn-ghost" onClick={() => removeItem(pool, it.id)}>הסרת השאלה</button>
+              </div>
+            ) : (
+              <label className="check">
+                {dr.status === 'approved' && s.role === 'teacher' && it.options && <input type="checkbox" checked={chosen.includes(key)} aria-label={`לכלול במבחן: ${it.text}`}
+                  onChange={e => setChosen(c => (e.target.checked ? [...c, key] : c.filter(x => x !== key)))} />}
+                <span className="small">{it.text.replace('\n', ' – ')}{it.options ? ` [${it.options.join(' / ')}] ✓ ${it.answer}` : ''}</span>
+              </label>
+            )}
+          </li>
+        ))}</ol>
+        {editing && <div className="row wrap">
+          <button className="btn btn-small btn-primary" onClick={() => run(async () => { await data.updateDraft(s, dr.id, pack as Record<string, unknown>); setEditing(false) }, 'השינויים בטיוטה נשמרו')}>שמירת השינויים</button>
+          <button className="btn btn-small btn-ghost" onClick={() => { setPack(dr.pack as Pack); setEditing(false) }}>ביטול</button>
+        </div>}
+      </details>
+      {dr.status === 'approved' && s.role === 'teacher' && groups.data && groups.data.length > 0 && (
+        <div className="row wrap" style={{ marginTop: 8 }}>
+          <select aria-label="לאיזו קבוצה" value={target} onChange={e => setTarget(e.target.value)}><option value="">קבוצה…</option>{groups.data.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}</select>
+          <button className="btn btn-small btn-primary" disabled={!target || !chosen.length}
+            onClick={() => run(async () => { await data.quizFromDraft(s, dr.id, target, `מבחן: ${d.material.title}`, chosen); navigate('/teacher/assignments') }, 'נוצר מבחן (טיוטה)')}>
+            יצירת מבחן ({chosen.length} שאלות)</button>
+        </div>
+      )}
+    </li>
   )
 }
 
 function ContentStep({ d, run }: { d: MaterialDetail; run: Run }) {
-  const data = useData(), s = useSession(), navigate = useNavigate()
+  const data = useData(), s = useSession()
   const meta = { subjectName: 'כללי', grade: 'ה' }
-  const groups = useAsync(() => (s.role === 'teacher' ? data.myGroups(s) : Promise.resolve([] as Group[])), [data, s.userId])
-  const [target, setTarget] = useState('')
   return (
     <Card title="3. תוכן לתרגול (טיוטה ובדיקה)">
-      <p className="small muted">כל תוכן נוצר כטיוטה. ילד לא רואה אותו לפני שאישרת.</p>
+      <p className="small muted">כל תוכן נוצר כטיוטה. אפשר לערוך שאלות לפני האישור, וילד לא רואה דבר לפני שאישרת.</p>
       <div className="row wrap">
         <button className="btn btn-secondary" disabled={!d.topics.length} onClick={() => run(() => data.createTemplateDraft(s, d.material.id, meta), 'נוצרה טיוטה לפי תבנית')}>יצירה לפי תבנית (ללא AI)</button>
         <button className="btn btn-secondary" disabled={!d.topics.length} onClick={() => run(() => data.requestAiDraft(s, d.material.id, meta), 'נוצרה טיוטה עם AI')}>יצירה עם AI</button>
       </div>
-      {d.drafts.length === 0 ? <p className="muted">עוד אין טיוטות.</p> : (
-        <ul className="list">{d.drafts.map(dr => (
-          <li key={dr.id} className="list-row" style={{ alignItems: 'flex-start' }}>
-            <div style={{ flex: 1 }}>
-              <span className="row wrap"><Badge tone={dr.provider === 'ai' ? 'info' : 'neutral'}>{dr.provider === 'ai' ? 'נוצר ב-AI' : 'תבנית, ללא AI'}</Badge>
-                <span className={`status-pill status-${dr.status === 'approved' ? 'published' : dr.status === 'rejected' ? 'archived' : 'draft'}`}>{dr.status === 'approved' ? 'אושר' : dr.status === 'rejected' ? 'נדחה' : 'ממתין לבדיקה'}</span></span>
-              <DraftPreview draft={dr} />
-            </div>
-            <span className="row wrap">
-              {dr.status === 'draft' && <>
-                <button className="btn btn-small btn-primary" onClick={() => run(() => data.reviewDraft(s, dr.id, true), 'התוכן אושר')}>אישור</button>
-                <button className="btn btn-small btn-secondary" onClick={() => run(() => data.reviewDraft(s, dr.id, false), 'התוכן נדחה')}>דחייה</button>
-              </>}
-              {dr.status === 'approved' && s.role === 'teacher' && groups.data && groups.data.length > 0 && <>
-                <select aria-label="לאיזו קבוצה" value={target} onChange={e => setTarget(e.target.value)}><option value="">קבוצה…</option>{groups.data.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}</select>
-                <button className="btn btn-small btn-primary" disabled={!target} onClick={() => run(async () => { await data.quizFromDraft(s, dr.id, target, `מבחן: ${d.material.title}`); navigate('/teacher/assignments') }, 'נוצר מבחן (טיוטה)')}>יצירת מבחן</button>
-              </>}
-            </span>
-          </li>
-        ))}</ul>
-      )}
+      {d.drafts.length === 0 ? <p className="muted">עוד אין טיוטות.</p> : <ul className="list">{d.drafts.map(dr => <DraftCard key={dr.id} dr={dr} d={d} run={run} />)}</ul>}
     </Card>
   )
 }

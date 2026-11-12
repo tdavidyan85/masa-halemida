@@ -350,9 +350,19 @@ describe('learning materials (demo data source)', () => {
     await user.click(screen.getByRole('button', { name: 'יצירה לפי תבנית (ללא AI)' }))
     expect(await screen.findByText('ממתין לבדיקה')).toBeInTheDocument()
     expect(screen.getByText('תבנית, ללא AI')).toBeInTheDocument()
+    // edit a question before approving: the label stays "template" and the draft is marked as edited
+    await user.click(screen.getByRole('button', { name: 'עריכה' }))
+    const q1 = screen.getAllByLabelText(/^ניסוח q1$/)[0]
+    await user.clear(q1); await user.type(q1, 'שאלה שתוקנה בידי המורה')
+    await user.click(screen.getByRole('button', { name: 'שמירת השינויים' }))
+    expect(await screen.findByText('נערך בידי מבוגר')).toBeInTheDocument()
+    expect(screen.getByText('תבנית, ללא AI')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'אישור' }))
+    const boxes = await screen.findAllByRole('checkbox', { name: /לכלול במבחן/ })
+    await user.click(boxes[0])                                                       // leave one question out
+    expect(screen.getByRole('button', { name: `יצירת מבחן (${boxes.length - 1} שאלות)` })).toBeInTheDocument()
     await user.selectOptions(await screen.findByLabelText('לאיזו קבוצה'), 'g-math5')
-    await user.click(screen.getByRole('button', { name: 'יצירת מבחן' }))
+    await user.click(screen.getByRole('button', { name: /^יצירת מבחן/ }))
     const card = (await screen.findByRole('heading', { name: /מבחן: mayim/ })).closest('section')!
     expect(within(card).getByText('טיוטה')).toBeInTheDocument()                    // still needs publishing
   })

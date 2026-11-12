@@ -12,10 +12,13 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.119.0",
+    "@tesseract.js-data/eng": "^1.0.0",
+    "@tesseract.js-data/heb": "^1.0.0",
     "pdfjs-dist": "^6.5.438",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
-    "react-router": "^7.18.5"
+    "react-router": "^7.18.5",
+    "tesseract.js": "^7.0.0"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^7.0.1",

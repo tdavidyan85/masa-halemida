@@ -108,15 +108,17 @@ export interface DataSource {
   uploadMaterial(s: Session, file: File, title: string): Promise<Material>
   materialDetail(s: Session, id: string): Promise<MaterialDetail>
   materialFileUrl(s: Session, id: string): Promise<string>
-  saveExtraction(s: Session, id: string, text: string, pages: number): Promise<void>
+  saveExtraction(s: Session, id: string, text: string, pages: number, confidence?: number): Promise<void>
   saveTopics(s: Session, id: string, topics: MaterialTopic[]): Promise<void>
   /** a draft built by fixed rules (no AI) from the topics */
   createTemplateDraft(s: Session, id: string, meta: { subjectName: string; grade: string }): Promise<ContentDraft>
   /** an AI draft made on the server; fails with a clear message when no AI provider is configured */
   requestAiDraft(s: Session, id: string, meta: { subjectName: string; grade: string }): Promise<ContentDraft>
+  /** edit questions/lessons of a draft before approving it (the template/AI label stays; it is marked as edited) */
+  updateDraft(s: Session, draftId: string, pack: Record<string, unknown>): Promise<void>
   reviewDraft(s: Session, draftId: string, approve: boolean): Promise<void>
   /** an APPROVED draft's multiple-choice questions → a draft quiz assignment for one of the teacher's groups */
-  quizFromDraft(s: Session, draftId: string, groupId: string, title: string): Promise<string>
+  quizFromDraft(s: Session, draftId: string, groupId: string, title: string, itemKeys?: string[]): Promise<string>
   shareMaterial(s: Session, id: string, target: MaterialShare): Promise<void>
   sharedWithMe(s: Session): Promise<Material[]>
   myInvitations(s: Session): Promise<(Invitation & { group: Group })[]>

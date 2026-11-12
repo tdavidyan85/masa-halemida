@@ -1,8 +1,9 @@
 // Phase 4: materials, extraction, topics, content drafts (template + AI adapter), sharing – logic and RLS.
 import { after, before, describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import { checkPack, splitIntoTopics, templatePack } from '../functions/_shared/content.ts'
-import { AiOutputError, AiUnavailableError, AnthropicProvider, buildPrompt, createProvider, generateChecked } from '../functions/_shared/ai.ts'
+import { checkPack, checkSafeContent, splitIntoTopics, templatePack } from '../functions/_shared/content.ts'
+import { AiOutputError, AiQuotaError, AiTimeoutError, AiUnavailableError, AnthropicProvider, buildPrompt, createProvider, generateChecked, readAiConfig } from '../functions/_shared/ai.ts'
+import { errorResponse } from '../functions/_shared/http.ts'
 import { startDb, tx, U } from './db.mjs'
 
 const TEXT = `פרק 1: מחזור המים
@@ -52,30 +53,78 @@ describe('template content (rules, not AI)', () => {
   })
 })
 
-describe('AI adapter', () => {
+describe('AI adapter and safeguards', () => {
   const req = { topics: splitIntoTopics(TEXT), meta: { subjectName: 'מדעים', grade: 'ה', unit: 'מים' }, want: ['lessons', 'quiz'] }
-  it('no credentials → no provider → "not configured" (never pretends)', async () => {
-    assert.equal(createProvider(() => undefined), null)
-    await assert.rejects(generateChecked(null, req), AiUnavailableError)
+  const ON = { AI_PROVIDER: 'anthropic', ANTHROPIC_API_KEY: 'sk-ant-test-not-real', AI_MONTHLY_TOKEN_BUDGET: '100000' }
+  const cfgOf = env => readAiConfig(k => env[k])
+  const ledger = (reply = { ok: true, id: 'r1' }) => { const log = []; return { log, reserve: async n => { log.push(['reserve', n]); return reply }, finish: async (id, ok, u) => { log.push(['finish', id, ok, u]) } } }
+  const good = templatePack(splitIntoTopics(TEXT), { subjectName: 'מדעים', grade: 'ה', unit: 'x' })
+  const fake = (pack, usage = { tokensIn: 10, tokensOut: 20 }) => ({ name: 'fake', generatePack: async () => ({ pack, usage }) })
+
+  it('nothing runs without explicit configuration: provider, a real-looking key AND a monthly budget', () => {
+    assert.equal(createProvider(cfgOf({})), null)
+    assert.equal(createProvider(cfgOf({ ...ON, AI_MONTHLY_TOKEN_BUDGET: '0' })), null)
+    assert.equal(createProvider(cfgOf({ ...ON, ANTHROPIC_API_KEY: 'hello' })), null)
+    assert.equal(createProvider(cfgOf({ ...ON, AI_PROVIDER: 'none' })), null)
+    assert.ok(createProvider(cfgOf(ON)) instanceof AnthropicProvider)
+  })
+  it('settings are bounded: model allow-list, output-token cap, timeout', () => {
+    const c = cfgOf({ ...ON, AI_MODEL: 'some-expensive-model', AI_MAX_OUTPUT_TOKENS: '999999', AI_TIMEOUT_MS: '1', AI_DAILY_LIMIT_PER_USER: '9999' })
+    assert.equal(c.model, 'claude-sonnet-5-5'); assert.equal(c.maxOutputTokens, 8000); assert.equal(c.timeoutMs, 5000); assert.equal(c.dailyLimit, 50)
+  })
+  it('no provider → "not configured" (503); never pretends', async () => {
+    await assert.rejects(generateChecked(null, req, { cfg: cfgOf({}), ledger: ledger() }), e => e instanceof AiUnavailableError && e.status === 503)
+  })
+  it('budget is reserved BEFORE the call; quota/budget refusals are clear 429s; nothing is called', async () => {
+    let called = false
+    const p = { name: 'fake', generatePack: async () => { called = true; return { pack: good, usage: { tokensIn: 0, tokensOut: 0 } } } }
+    await assert.rejects(generateChecked(p, req, { cfg: cfgOf(ON), ledger: ledger({ ok: false, reason: 'daily_limit' }) }), e => e instanceof AiQuotaError && e.status === 429 && /מחר/.test(e.message))
+    await assert.rejects(generateChecked(p, req, { cfg: cfgOf(ON), ledger: ledger({ ok: false, reason: 'monthly_budget' }) }), /תקציב/)
+    await assert.rejects(generateChecked(p, req, { cfg: cfgOf(ON), ledger: ledger({ ok: false, reason: 'no_budget' }) }), AiUnavailableError)
+    assert.equal(called, false)
+  })
+  it('valid output is marked as AI and its usage recorded', async () => {
+    const l = ledger()
+    const out = await generateChecked(fake(good), req, { cfg: cfgOf(ON), ledger: l })
+    assert.deepEqual(out.generator, { kind: 'ai', provider: 'fake' })
+    assert.deepEqual(l.log.at(-1), ['finish', 'r1', true, { tokensIn: 10, tokensOut: 20 }])
+  })
+  it('strict output checks: broken packs, links, HTML, e-mails, phones are refused – and still counted as spent', async () => {
+    const bad = (mutate) => { const p = structuredClone(good); mutate(Object.values(p.pools)[0].items[0]); return p }
+    for (const [name, pack] of [['broken', { schema: 'masa-pack/1' }], ['link', bad(it => { it.hint = 'ראו https://example.com' })],
+      ['html', bad(it => { it.text = '<img src=x onerror=alert(1)>' })], ['email', bad(it => { it.hint = 'כתבו ל-a@b.example' })],
+      ['phone', bad(it => { it.hint = 'התקשרו 050-1234567' })]]) {
+      const l = ledger()
+      await assert.rejects(generateChecked(fake(pack), req, { cfg: cfgOf(ON), ledger: l }), e => e instanceof AiOutputError && e.status === 502, name)
+      assert.deepEqual(l.log.at(-1).slice(0, 3), ['finish', 'r1', false], name)
+    }
+    assert.deepEqual(checkSafeContent(bad(it => { it.text = 'מה <en>he</en> עושה?' })), [])        // the format's own markup is fine
+  })
+  it('a hanging provider is cut off by the timeout (504) and counted', async () => {
+    const hang = { name: 'slow', generatePack: (_r, signal) => new Promise((_, rej) => signal.addEventListener('abort', () => rej(new Error('aborted')))) }
+    const l = ledger()
+    const cfg = { ...cfgOf(ON), timeoutMs: 50 }
+    await assert.rejects(generateChecked(hang, req, { cfg, ledger: l }), e => e instanceof AiTimeoutError && e.status === 504)
+    assert.equal(l.log.at(-1)[2], false)
   })
   it('the prompt carries only the material and class info', () => {
     const p = buildPrompt(req)
     assert.match(p, /מחזור המים/)
-    for (const forbidden of [U.S1, U.P1, 'student', 'full_name', 'email']) assert.ok(!p.includes(forbidden), forbidden)
+    for (const forbidden of [U.S1, U.P1, 'student', 'full_name', 'email:']) assert.ok(!p.includes(forbidden), forbidden)
   })
-  it('a provider\'s output is validated; invalid output is refused, valid output is marked as AI', async () => {
-    const good = templatePack(req.topics, req.meta)
-    const out = await generateChecked({ name: 'fake', generatePack: async () => good }, req)
-    assert.equal(out.generator.kind, 'ai')
-    await assert.rejects(generateChecked({ name: 'fake', generatePack: async () => ({ schema: 'masa-pack/1' }) }, req), AiOutputError)
-  })
-  it('the Anthropic adapter sends the prompt server-side and reads the tool result (fake fetch, no real call)', async () => {
+  it('the Anthropic adapter sends the prompt server-side with the caps, and reads the tool result (fake fetch)', async () => {
     let sent
-    const fake = async (url, init) => { sent = { url, init }; return new Response(JSON.stringify({ content: [{ type: 'tool_use', name: 'submit_pack', input: { pack: { schema: 'masa-pack/1' } } }] })) }
-    const out = await new AnthropicProvider('test-key', 'claude-sonnet-5-5', fake).generatePack(req)
-    assert.deepEqual(out, { schema: 'masa-pack/1' })
+    const f = async (url, init) => { sent = { url, init }; return new Response(JSON.stringify({ content: [{ type: 'tool_use', name: 'submit_pack', input: { pack: { schema: 'masa-pack/1' } } }], usage: { input_tokens: 5, output_tokens: 7 } })) }
+    const out = await new AnthropicProvider({ ...cfgOf(ON), key: 'sk-ant-test-not-real' }, f).generatePack(req)
+    assert.deepEqual(out, { pack: { schema: 'masa-pack/1' }, usage: { tokensIn: 5, tokensOut: 7 } })
     assert.equal(sent.url, 'https://api.anthropic.com/v1/messages')
-    assert.equal(sent.init.headers['x-api-key'], 'test-key')
+    assert.equal(JSON.parse(sent.init.body).max_tokens, 6000)
+  })
+  it('the function\'s error response shows the clear message for AI errors', async () => {
+    const r = errorResponse(new AiQuotaError('monthly_budget'), {})
+    assert.equal(r.status, 429); assert.match((await r.json()).message, /תקציב/)
+    const internal = errorResponse(new Error('db password is …'), {})
+    assert.doesNotMatch(await internal.text(), /password/)
   })
 })
 

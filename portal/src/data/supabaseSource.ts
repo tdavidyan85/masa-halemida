@@ -43,10 +43,11 @@ function saveDeviceToken(studentId: string, token: string) {
 }
 
 type Row = Record<string, unknown>
-const MATERIAL_COLS = 'id, owner_id, title, storage_path, status, created_at, mime_type, size_bytes, extraction_status, page_count'
+const MATERIAL_COLS = 'id, owner_id, title, storage_path, status, created_at, mime_type, size_bytes, extraction_status, page_count, extraction_confidence'
 const toMaterial = (r: Row): Material => ({ id: String(r.id), ownerId: String(r.owner_id), title: String(r.title), fileName: String(r.storage_path ?? '').split('/').pop() ?? '',
   pages: Number(r.page_count ?? 0), status: r.status as Material['status'], uploadedAt: String(r.created_at).slice(0, 10), mimeType: (r.mime_type as string | null) ?? undefined,
-  sizeBytes: r.size_bytes == null ? undefined : Number(r.size_bytes), extractionStatus: (r.extraction_status as Material['extractionStatus']) ?? undefined })
+  sizeBytes: r.size_bytes == null ? undefined : Number(r.size_bytes), extractionStatus: (r.extraction_status as Material['extractionStatus']) ?? undefined,
+  extractionConfidence: r.extraction_confidence == null ? undefined : Number(r.extraction_confidence) })
 const toDraft = (r: Row): ContentDraft => ({ id: String(r.id), materialId: String(r.material_id), provider: r.provider as ContentDraft['provider'],
   status: r.status as ContentDraft['status'], pack: r.pack as Record<string, unknown>, createdAt: String(r.created_at) })
 const ASSIGNMENT_COLS = 'id, group_id, title, instructions, kind, player_path, status, due_at'
@@ -361,7 +362,9 @@ export class SupabaseSource implements DataSource {
     if (error || !data) throw toUserError(error)
     return data.signedUrl
   }
-  async saveExtraction(_s: Session, id: string, text: string, pages: number) { check(await this.sb.rpc('save_extraction', { p_material: id, p_text: text, p_pages: pages })) }
+  async saveExtraction(_s: Session, id: string, text: string, pages: number, confidence?: number) {
+    check(await this.sb.rpc('save_extraction', { p_material: id, p_text: text, p_pages: pages, p_confidence: confidence ?? null }))
+  }
   async saveTopics(_s: Session, id: string, topics: MaterialTopic[]) {
     check(await this.sb.from('material_topics').delete().eq('material_id', id))
     const rows = topics.filter(t => t.title.trim()).slice(0, 200).map((t, i) => ({ material_id: id, position: i + 1, title: t.title.trim().slice(0, 200), body: t.body.slice(0, 20000) }))
@@ -388,9 +391,13 @@ export class SupabaseSource implements DataSource {
     }
     return this.draftById(String((data as Row).draftId))
   }
+  async updateDraft(_s: Session, draftId: string, pack: Record<string, unknown>) {
+    if (checkPack(pack).length) throw new LoginError('בכל שאלה צריך ניסוח, לפחות שתי תשובות שונות, ותשובה נכונה מתוכן')
+    check(await this.sb.rpc('update_content_draft', { p_draft: draftId, p_pack: pack }))
+  }
   async reviewDraft(_s: Session, draftId: string, approve: boolean) { check(await this.sb.rpc('review_content_draft', { p_draft: draftId, p_approve: approve })) }
-  async quizFromDraft(_s: Session, draftId: string, groupId: string, title: string) {
-    return check(await this.sb.rpc('quiz_from_draft', { p_draft: draftId, p_group: groupId, p_title: title })) as string
+  async quizFromDraft(_s: Session, draftId: string, groupId: string, title: string, itemKeys?: string[]) {
+    return check(await this.sb.rpc('quiz_from_draft', { p_draft: draftId, p_group: groupId, p_title: title, p_items: itemKeys ?? null })) as string
   }
   async shareMaterial(_s: Session, id: string, target: MaterialShare) {
     check(await this.sb.rpc('share_material', { p_material: id, p_group: target.groupId ?? null, p_student: target.studentId ?? null }))

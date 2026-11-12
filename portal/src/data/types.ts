@@ -110,6 +110,8 @@ export interface Material {
   mimeType?: string
   sizeBytes?: number
   extractionStatus?: 'pending' | 'done' | 'failed' | 'unsupported'
+  /** OCR confidence 0–100 when the text came from OCR */
+  extractionConfidence?: number
 }
 
 export interface MaterialTopic { title: string; body: string }

@@ -1,14 +1,14 @@
 // Edge Function `generate-content` (Deno): an adult asks for an AI draft from the topics of THEIR material.
 //   POST { materialId, want?: [...] }  →  201 { draftId }  ·  503 when no AI provider is configured
-// Without ANTHROPIC_API_KEY this always answers 503 – nothing is generated or pretended. The draft is saved only
+// Without AI_PROVIDER + ANTHROPIC_API_KEY + a monthly budget this always answers 503 – nothing is generated or pretended. The draft is saved only
 // after it passed the masa-pack/1 checks, and stays a draft until the owner approves it.
 import { createClient } from 'npm:@supabase/supabase-js@2'
-import { createProvider, generateChecked } from '../_shared/ai.ts'
+import { createProvider, generateChecked, readAiConfig } from '../_shared/ai.ts'
 import { corsHeaders, errorResponse, json } from '../_shared/http.ts'
 
 const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, { auth: { persistSession: false, autoRefreshToken: false } })
 const ALLOWED = Deno.env.get('ALLOWED_ORIGINS') ?? 'http://localhost:5173'
-const PER_DAY = Number(Deno.env.get('AI_DRAFTS_PER_DAY') ?? '10')
+const CFG = readAiConfig(k => Deno.env.get(k))
 
 Deno.serve(async req => {
   const headers = corsHeaders(req.headers.get('origin'), ALLOWED)
@@ -21,14 +21,21 @@ Deno.serve(async req => {
     const body = await req.json().catch(() => ({}))
     const { data: m } = await admin.from('learning_materials').select('id, title').eq('id', String(body.materialId ?? '')).eq('owner_id', u.user.id).maybeSingle()
     if (!m) return json(403, { error: 'forbidden', message: 'החומר לא נמצא או שאינו שלך' }, headers)
-    const provider = createProvider(k => Deno.env.get(k))
+    const provider = createProvider(CFG)
     if (!provider) return json(503, { error: 'ai_unavailable', message: 'יצירה עם בינה מלאכותית לא מוגדרת בשרת הזה. אפשר להשתמש בתבנית האוטומטית.' }, headers)
-    const since = new Date(Date.now() - 86_400_000).toISOString()
-    const { count } = await admin.from('content_drafts').select('id', { count: 'exact', head: true }).eq('created_by', u.user.id).eq('provider', 'ai').gte('created_at', since)
-    if ((count ?? 0) >= PER_DAY) return json(429, { error: 'quota', message: 'הגעת למכסת היצירה היומית' }, headers)
     const { data: topics } = await admin.from('material_topics').select('title, body').eq('material_id', m.id).order('position')
-    const pack = await generateChecked(provider, { topics: topics ?? [], meta: { subjectName: String(body.subjectName ?? 'כללי'), grade: String(body.grade ?? 'ה'), unit: String(m.title) },
-      want: ['lessons', 'explanations', 'exercises', 'quiz'] })
+    const ledger = {
+      async reserve(tokens: number) {
+        const { data, error } = await admin.rpc('srv_ai_reserve', { p_user: u.user!.id, p_material: m.id, p_tokens: tokens, p_daily_limit: CFG.dailyLimit, p_monthly_budget: CFG.monthlyBudget })
+        if (error) throw new Error(error.message)
+        return data
+      },
+      async finish(id: string, ok: boolean, usage: { tokensIn: number; tokensOut: number }) {
+        await admin.rpc('srv_ai_finish', { p_request: id, p_ok: ok, p_in: usage.tokensIn, p_out: usage.tokensOut })
+      },
+    }
+    const pack = await generateChecked(provider, { topics: topics ?? [], meta: { subjectName: String(body.subjectName ?? 'כללי').slice(0, 40), grade: String(body.grade ?? 'ה').slice(0, 4), unit: String(m.title) },
+      want: ['lessons', 'explanations', 'exercises', 'quiz'] }, { cfg: CFG, ledger })
     const { data: draftId, error: e2 } = await admin.rpc('srv_save_ai_draft', { p_user: u.user.id, p_material: m.id, p_pack: pack })
     if (e2) throw new Error(e2.message)
     return json(201, { draftId }, headers)

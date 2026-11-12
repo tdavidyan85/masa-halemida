@@ -125,8 +125,9 @@ describe('practice telemetry (unverified)', () => {
   }))
   it('students have no direct writes to results, statuses or events', t(async s => {
     const a = await quiz(s)
+    const p = await practice(s)
     await s.as(U.S1)
-    await s.rows(`select public.start_session($1)`, [a])
+    await s.rows(`select public.start_session($1)`, [p])
     for (const q of [
       [`insert into public.quiz_attempts (assignment_id, student_id, attempt_no, answers, score, max_score) values ($1, $2, 1, '{1,0,2}', 3, 3)`, [a, U.S1]],
       [`update public.assignment_status set verified_score = 3, verified_max = 3 where assignment_id = $1`, [a]],
@@ -179,8 +180,9 @@ describe('account deletion', () => {
 describe('who sees learning data', () => {
   async function activity(s) {
     const a = await quiz(s)
+    const p = await practice(s)
     await s.as(U.S1)
-    const sid = (await s.one(`select public.start_session($1) as id`, [a])).id
+    const sid = (await s.one(`select public.start_session($1) as id`, [p])).id
     await s.rows(`select public.record_progress($1, $2)`, [sid, JSON.stringify(ev(2))])
     await s.rows(`select public.submit_quiz($1, '{1,0,2}')`, [a])
     const free = (await s.one(`select public.start_session(null) as id`)).id      // free practice, no assignment

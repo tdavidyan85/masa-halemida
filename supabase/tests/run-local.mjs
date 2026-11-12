@@ -2,6 +2,7 @@
 // (`npm run local:start`). Reads the endpoints from `supabase status`; refuses anything that is not this machine.
 //   node tests/run-local.mjs [--workdir <folder that contains supabase/>]   (default: the repository root)
 import { spawnSync } from 'node:child_process'
+import { readdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -21,6 +22,8 @@ for (const k of ['API_URL', 'DB_URL', 'MAILPIT_URL']) {
 const testEnv = { ...process.env, TEST_DB_URL: env.DB_URL, E2E_API_URL: env.API_URL, E2E_ANON_KEY: env.ANON_KEY,
   E2E_SERVICE_ROLE_KEY: env.SERVICE_ROLE_KEY, E2E_MAILPIT_URL: env.MAILPIT_URL }
 console.log(`local Supabase: ${env.API_URL} (database ${new URL(env.DB_URL).host})`)
-const r = spawnSync(process.execPath, ['--test', '--test-concurrency=1', 'tests/rls.test.mjs', 'tests/learning.test.mjs', 'tests/materials.test.mjs', 'tests/functions.test.mjs', 'tests/e2e.test.mjs'],
+// every test file – a new one can never be forgotten here
+const files = readdirSync(HERE).filter(f => f.endsWith('.test.mjs')).sort().map(f => `tests/${f}`)
+const r = spawnSync(process.execPath, ['--test', '--test-concurrency=1', ...files],
   { cwd: SUPA, stdio: 'inherit', env: testEnv })
 process.exit(r.status ?? 1)

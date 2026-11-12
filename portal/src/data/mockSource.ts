@@ -191,9 +191,10 @@ export class MockSource implements DataSource {
     if (!url) throw new Error('בהדגמה אפשר לפתוח רק קבצים שהועלו עכשיו')
     return this.wait(url)
   }
-  async saveExtraction(s: Session, id: string, text: string, pages: number) {
+  async saveExtraction(s: Session, id: string, text: string, pages: number, confidence?: number) {
     const m = this.ownMaterial(s, id)
     this.texts.set(id, text.slice(0, 200000)); m.pages = pages; m.extractionStatus = text.trim() ? 'done' : 'failed'
+    m.extractionConfidence = confidence === undefined ? undefined : Math.max(0, Math.min(100, Math.round(confidence)))
     await this.wait(null)
   }
   async saveTopics(s: Session, id: string, topics: MaterialTopic[]) {
@@ -215,6 +216,15 @@ export class MockSource implements DataSource {
     this.ownMaterial(s, id)
     throw new DemoOnlyError('בהדגמה אין יצירה עם בינה מלאכותית. אפשר להשתמש בתבנית האוטומטית.')
   }
+  async updateDraft(s: Session, draftId: string, pack: Record<string, unknown>) {
+    const d = this.drafts.find(x => x.id === draftId)
+    if (!d) throw new ForbiddenError('הטיוטה לא נמצאה')
+    this.ownMaterial(s, d.materialId)
+    if (d.status !== 'draft') throw new Error('אפשר לערוך רק טיוטה')
+    if (checkPack(pack).length) throw new Error('בכל שאלה צריך ניסוח, לפחות שתי תשובות שונות, ותשובה נכונה מתוכן')
+    d.pack = { ...pack, generator: { kind: d.provider, edited: true } }
+    await this.wait(null)
+  }
   async reviewDraft(s: Session, draftId: string, approve: boolean) {
     const d = this.drafts.find(x => x.id === draftId)
     if (!d) throw new ForbiddenError('הטיוטה לא נמצאה')
@@ -223,14 +233,14 @@ export class MockSource implements DataSource {
     d.status = approve ? 'approved' : 'rejected'
     await this.wait(null)
   }
-  async quizFromDraft(s: Session, draftId: string, groupId: string, title: string) {
+  async quizFromDraft(s: Session, draftId: string, groupId: string, title: string, itemKeys?: string[]) {
     this.need(s, 'teacher')
     const d = this.drafts.find(x => x.id === draftId)
     if (!d) throw new ForbiddenError('הטיוטה לא נמצאה')
     this.ownMaterial(s, d.materialId)
     if (d.status !== 'approved') throw new Error('קודם מאשרים את התוכן')
-    const pools = Object.values((d.pack.pools ?? {}) as Record<string, { items: { text: string; options: string[]; answer: string }[] }>)
-    const items = pools.flatMap(p => p.items).filter(it => Array.isArray(it.options) && it.options.includes(it.answer)).slice(0, 20)
+    const pools = Object.entries((d.pack.pools ?? {}) as Record<string, { items: { id: string; text: string; options: string[]; answer: string }[] }>)
+    const items = pools.flatMap(([k, p]) => p.items.filter(it => !itemKeys || itemKeys.includes(`${k}/${it.id}`))).filter(it => Array.isArray(it.options) && it.options.includes(it.answer)).slice(0, 20)
       .map((it, i) => ({ position: i + 1, prompt: it.text, options: it.options, answerIndex: it.options.indexOf(it.answer) }))
     if (!items.length) throw new Error('בתוכן אין שאלות אמריקאיות')
     return (await this.createAssignment(s, { groupId, title, instructions: '', kind: 'quiz', items })).id
