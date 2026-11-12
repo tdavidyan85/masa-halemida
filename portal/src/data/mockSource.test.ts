@@ -2,7 +2,7 @@
 import { MockSource } from './mockSource'
 import { ForbiddenError, LoginError } from './source'
 import { DEMO_PASSWORD, DEMO_PIN } from './mockData'
-import { createDataSource } from '.'
+import { loadDataSource } from '.'
 import { ConfigError } from './config'
 
 const src = () => new MockSource()
@@ -107,10 +107,10 @@ describe('invitations and consent', () => {
 })
 
 describe('data source selection', () => {
-  it('uses the mock source by default', () => {
-    expect(createDataSource({}).kind).toBe('mock')
+  it('uses the mock source by default', async () => {
+    expect((await loadDataSource({})).kind).toBe('mock')
   })
-  it('refuses "supabase" without complete settings (no silent fallback to demo)', () => {
-    expect(() => createDataSource({ VITE_DATA_SOURCE: 'supabase' })).toThrow(ConfigError)
+  it('refuses "supabase" without complete settings (no silent fallback to demo)', async () => {
+    await expect(loadDataSource({ VITE_DATA_SOURCE: 'supabase' })).rejects.toBeInstanceOf(ConfigError)
   })
 })
