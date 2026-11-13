@@ -12,6 +12,7 @@ const TESTS=[
   ['tscan.js','Photo scan page (parent)'],
   ['tread.js','Reading options for accessibility'],
   ['tpwa.js','Install, offline, progress trend'],
+  ['tsave.js','Hostile restore links (R10-A): shown as text, page keeps working'],
 ];
 if(!['index.min.html','english.min.html'].every(f=>fs.existsSync(path.join(SRC,'deploy',f)))){
   console.log('✗ deploy/ is missing – run `npm run build` first');process.exit(1)}

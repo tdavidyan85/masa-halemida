@@ -644,16 +644,49 @@ function owlSVG(sz=120,mood='happy',look){
 }
 
 /* ================= speech ================= */
+// A saved state can come from outside the page (a restore link anyone can send, another tab) –
+// every field is reduced to the shape the engine itself writes, so nothing in it can ever be read as markup.
+function stClean(o){if(!o||typeof o!='object'||Array.isArray(o)||!o.settings||typeof o.settings!='object'||Array.isArray(o.settings))return null;
+  const isO=v=>v&&typeof v=='object'&&!Array.isArray(v),okK=k=>typeof k=='string'&&k.length<=80&&!/[<>&"'`]/.test(k),
+    N=(v,lo=-1e9,hi=1e9)=>{v=+v;return isFinite(v)?Math.max(lo,Math.min(hi,v)):0},
+    T=(v,n=200)=>typeof v=='string'?v.replace(/[<>&"'`]/g,'').slice(0,n):typeof v=='number'&&isFinite(v)?String(v):'',
+    D=v=>typeof v=='string'&&/^\d{4}-\d{1,2}-\d{1,2}$/.test(v)?v:undefined,
+    map=(m,f)=>{const r={};if(isO(m))for(const [k,v] of Object.entries(m))if(okK(k)){const x=f(v);if(x!==undefined)r[k]=x}return r},
+    nums=m=>map(m,v=>N(v)),nums2=m=>map(m,v=>isO(v)?nums(v):undefined),
+    rec=v=>isO(v)?map(v,x=>typeof x=='string'?x.slice(0,400):typeof x=='number'&&isFinite(x)?x:typeof x=='boolean'?x:undefined):undefined;
+  const st=o.settings,S={};
+  for(const [k,v] of Object.entries(st)){if(!okK(k))continue;
+    if(['rate','rate2'].includes(k))S[k]=N(v,0.3,3);
+    else if(k=='focus')S[k]=Array.isArray(v)?v.filter(okK).slice(0,40):[];
+    else if(k=='read')S[k]=map(v,x=>!!x);
+    else if(typeof v=='boolean')S[k]=v;
+    else if(typeof v=='number'&&isFinite(v))S[k]=v;
+    else if(typeof v=='string')S[k]=T(v,80)}
+  const out={stars:N(o.stars,0),streak:N(o.streak,0),best:N(o.best,0),copied:N(o.copied,0),settings:S,
+    stats:nums2(o.stats),genStats:nums2(o.genStats),daily:nums2(o.daily),gStreak:nums(o.gStreak),lvl:nums(o.lvl),tour:nums(o.tour),
+    mtypes:map(o.mtypes,v=>N(v,0)),days:map(o.days,v=>D(v)!==undefined||v===true?true:undefined),lessons:map(o.lessons,D),
+    srs:map(o.srs,v=>isO(v)?map(v,x=>typeof x=='number'?N(x):D(x)):undefined),
+    sheets:map(o.sheets,v=>isO(v)?{first:Array.isArray(v.first)?v.first.map(x=>!!x).slice(0,500):[],date:D(v.date)||'',earned:N(v.earned)}:undefined),
+    owl:map(o.owl,v=>typeof v=='string'&&/^[A-Za-z0-9_-]{1,24}$/.test(v)?v:undefined),
+    owned:Array.isArray(o.owned)?o.owned.filter(v=>typeof v=='string'&&/^[A-Za-z0-9_-]{1,24}:[A-Za-z0-9_-]{1,24}$/.test(v)):[],
+    mistakes:Array.isArray(o.mistakes)?o.mistakes.map(rec).filter(Boolean).slice(-500):[],
+    flog:Array.isArray(o.flog)?o.flog.map(rec).filter(Boolean).slice(-500):[]};
+  if(o.backupAt!==undefined&&D(o.backupAt))out.backupAt=o.backupAt;
+  if(isO(o.plan))out.plan={note:T(o.plan.note,400),focus:Array.isArray(o.plan.focus)?o.plan.focus.filter(okK).slice(0,40):[]};
+  else if(o.plan===null)out.plan=null;
+  for(const [k,v] of Object.entries(o))if(/^exams(_[a-z]{1,20})?$/.test(k)&&isO(v))out[k]=map(v,e=>isO(e)?map(e,x=>typeof x=='number'?N(x):D(x)):undefined);   // practice-exam records (EXS)
+  for(const [k,v] of Object.entries(o))if(!(k in out)&&okK(k)&&(typeof v=='boolean'||(typeof v=='number'&&isFinite(v))))out[k]=v;   // a newer engine's simple flags
+  return out}
 const store={get(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
-let ST=store.get('mj-state',null)||{stars:0,streak:0,best:0,stats:{},mistakes:[],days:{},copied:0,settings:{auto:true,rate:0.8,voice:'',sound:true}};
+let ST=stClean(store.get('mj-state',null))||{stars:0,streak:0,best:0,stats:{},mistakes:[],days:{},copied:0,settings:{auto:true,rate:0.8,voice:'',sound:true}};
 if(!ST.settings.rate2){if(!ST.settings.rate||ST.settings.rate>=0.9)ST.settings.rate=0.8;ST.settings.rate2=1}
 ST.owl=ST.owl||{hat:'grad',glasses:'none',scarf:'none',color:'brown'};
 ST.owned=ST.owned||SHOP.filter(i=>i.price==0).map(i=>i.id);
 function save(){store.set('mj-state',ST)}
 /* keep progress safe: ask the browser not to evict it, and stay in sync when the game is open in two tabs (math + English) */
 try{navigator.storage&&navigator.storage.persist&&navigator.storage.persist()}catch(e){}
-document.addEventListener('visibilitychange',()=>{if(document.hidden)return;const n=store.get('mj-state',null);if(n&&n.settings){ST=n;try{refreshChips()}catch(e){}}});
-window.addEventListener('storage',e=>{if(e.key!=='mj-state'||!e.newValue)return;try{const n=JSON.parse(e.newValue);if(n&&n.settings){ST=n;refreshChips&&refreshChips()}}catch(_){}});
+document.addEventListener('visibilitychange',()=>{if(document.hidden)return;const n=stClean(store.get('mj-state',null));if(n){ST=n;try{refreshChips()}catch(e){}}});
+window.addEventListener('storage',e=>{if(e.key!=='mj-state'||!e.newValue)return;try{const n=stClean(JSON.parse(e.newValue));if(n){ST=n;refreshChips&&refreshChips()}}catch(_){}});
 /* personal save link: the whole progress packed into a link (#save=...) – opening it restores everything, in any browser */
 const b64u={enc:u8=>{let s='';for(let i=0;i<u8.length;i+=0x8000)s+=String.fromCharCode.apply(null,u8.subarray(i,i+0x8000));return btoa(s).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'')},
   dec:t=>{t=t.replace(/-/g,'+').replace(/_/g,'/');while(t.length%4)t+='=';const s=atob(t);const u=new Uint8Array(s.length);for(let i=0;i<s.length;i++)u[i]=s.charCodeAt(i);return u}};
@@ -662,7 +695,7 @@ async function packState(){const json=JSON.stringify({v:1,ST});const data=new Te
   return 'j'+b64u.enc(data)}
 async function unpackState(code){const kind=code[0],u=b64u.dec(code.slice(1));let txt;
   if(kind=='z'){const ds=new Blob([u]).stream().pipeThrough(new DecompressionStream('deflate-raw'));txt=await new Response(ds).text()}else txt=new TextDecoder().decode(u);
-  const o=JSON.parse(txt);if(!o||!o.ST||!o.ST.settings)throw new Error('bad');return o.ST}
+  const o=JSON.parse(txt),c=o&&stClean(o.ST);if(!c)throw new Error('bad');return c}
 async function saveLink(){return location.origin+location.pathname+'#save='+await packState()}
 async function restoreFromHash(){const m=location.hash.match(/^#save=([A-Za-z0-9_-]+)/);if(!m)return;
   history.replaceState(null,'',location.pathname+location.search);
@@ -1763,7 +1796,7 @@ const MAPPTS=[[850,105],[520,95],[175,135],[245,380],[580,330],[845,430],[520,50
 function trailPath(P){let d=`M${P[0][0]},${P[0][1]}`;for(let i=0;i<P.length-1;i++){const p0=P[Math.max(0,i-1)],p1=P[i],p2=P[i+1],p3=P[Math.min(P.length-1,i+2)];
   const c1=[p1[0]+(p2[0]-p0[0])/6,p1[1]+(p2[1]-p0[1])/6],c2=[p2[0]-(p3[0]-p1[0])/6,p2[1]-(p3[1]-p1[1])/6];d+=` C${c1[0]},${c1[1]} ${c2[0]},${c2[1]} ${p2[0]},${p2[1]}`}return d}
 function recommendTopic(){
-  const foc=focusTopics();const pool=foc.length?TOPICS.filter(t=>foc.includes(t.id)):TOPICS;
+  const foc=focusTopics();let pool=foc.length?TOPICS.filter(t=>foc.includes(t.id)):TOPICS;if(!pool.length)pool=TOPICS;   // a focus from another subject or an old link
   return pool.map(t=>({t:t.id,score:(tstat(t.id).n<4?0.3:acc(t.id))+(tstat(t.id).n/200)})).sort((a,b)=>a.score-b.score)[0].t;
 }
 function mapHtml(){
